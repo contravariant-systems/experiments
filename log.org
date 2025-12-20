@@ -1,0 +1,30 @@
+* Contravariant Systems: Build Log
+
+** 2025-12-20: JAX Fundamentals
+
+*** Raw Notes
+
+**** Installing JAX and development tools
+
+#+begin_src shell
+python -m venv venv
+pip install -U jax
+pip freeze > requirements.txt
+pip install -U "python-lsp-server[all]"
+pip freeze > requirements-dev-tmp.txt
+diff requirements-dev-tmp.txt requirements.txt | grep  '^<' | sed -e 's/< //g' > requirements-dev.txt
+rm requirements-dev-tmp.txt
+#+end_src
+
+*** What I Built/Learnt
+
+*** What Surprised Me
+
+*** What Broke
+- [error, why it happened, how I fixed it]
+
+*** Open Questions
+- [things I don't yet understand]
+
+*** Refinements to the Vision
+- [if the day's work changed how I think about Contravariant]
