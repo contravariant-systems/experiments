@@ -1,6 +1,7 @@
 from time import time
 from functools import partial
 
+import jax
 import jax.numpy as jnp
 from jax.lax import scan
 from jax import vmap, grad, jit
@@ -56,7 +57,7 @@ def integrate_euler(state0, t_span, dt, params):
 state_0 = jnp.array([1.0, 0.0])
 t_span = jnp.array([0.0, 100.0])
 dt = 0.01
-print(state_0)
+# print(state_0)
 
 traj = integrate_euler(state_0, t_span, dt, params)
 
@@ -78,7 +79,7 @@ plt.ylabel('Energy over time')
 
 # Let's try to make the final energy a function of the inputs, so that
 # we can try to study it.
-jnp.array([0.0, 100.0])
+jnp.array([0.0, 1.0])
 
 def final_energy(state_0, t_span, dt, params):
     traj = integrate_euler(state_0, t_span, dt, params)
@@ -86,7 +87,8 @@ def final_energy(state_0, t_span, dt, params):
 
 print(final_energy(state_0, t_span, dt, params))
 grad_final_energy = grad(final_energy, argnums=[0, 3])
-print(grad_final_energy(state_0, t_span, dt, params))
+print(jax.make_jaxpr(grad_final_energy)(state_0, t_span, dt, params))
+# print(grad_final_energy(state_0, t_span, dt, params))
 
 # The following allows us to quickly do 100 independent simulations,
 # each 10,000 steps long, without needing to resort to Python looping.
