@@ -120,13 +120,6 @@ exists in =sho.py=.
   gradient is always available.
 
 ** 2025-12-21: Differentiating Through Dynamics
-*** Claude Notes
-
-**6. Ablations**
-- How much noise can you tolerate?
-- How much data do you need?
-- What happens if you use Euler instead of RK4 for learning?
-
 *** What I Built/Learnt
 **** General insights
 - In general, what is going on when constructing gradients is that the
