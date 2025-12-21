@@ -95,6 +95,14 @@ exists in =sho.py=.
   to 0.
 - I had to use =defaults write org.python.python ApplePersistenceIgnoreState NO=
   to prevent a very silly warning.
+- JAX's JIT is quite strict about changes to shapes of things at
+  runtime within the body of functions. The reason for this is that it
+  "traces" the code by running it, then stores the AST to act on it
+  later. If it suspects something can arbitrarily change at runtime,
+  it will complain. We can either mark it is as "don't worry about it,
+  this is unchanging" or reconfigure the code for shapes to be
+  explicit inputs.
+- I still need to better understand =jax.lax.scan=.
 
 *** Open Questions
 
