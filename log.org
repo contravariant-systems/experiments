@@ -118,3 +118,164 @@ exists in =sho.py=.
   need to vary this for sensitivity analysis and =m= and =k= could be
   either fixed constants or things to be learnt. Either way, the
   gradient is always available.
+
+** 2025-12-21: Differentiating Through Dynamics
+*** Claude Notes
+
+**6. Ablations**
+- How much noise can you tolerate?
+- How much data do you need?
+- What happens if you use Euler instead of RK4 for learning?
+
+*** What I Built/Learnt
+**** General insights
+- In general, what is going on when constructing gradients is that the
+  system is using the runtime tracing mechanism to create some sort of
+  AST (=jaxpr=), and then use AD in this space to construct gradients.
+- More specifically, for something like grad(final_energy) works
+  relative to the initial conditions we have many, many inputs and one
+  (pair of) outputs. This is best handled by reverse mode-AD. This
+  means that the machinery needs to store all time-steps worth of
+  forward calculations, and then use those in the backward pass as it
+  accumulates gradients. This can be memory-prohibitive when there are
+  too many steps involved.
+- This is what we get when we discretise first then attempt to
+  optimise. However, we can also attempt to do "something intelligent"
+  first, then discretise. This is the path followed by the Neural ODE
+  paper (Chen et al., 2018) which ends up in Diffrax.
+**** Replacing the Forward Eulter integrator with Runge-Kutta 4
+- It seems extremely energy conserving. This is because it is O(h^4)
+  accumulation error.
+- https://en.wikipedia.org/wiki/Runge–Kutta_methods
+
+**** Proceeding to the inverse problem
+Instead of simply fixing the parameters, we now assume they're unknown
+and will estimate them. This begins with calculating a trajectory with
+some known parameters. Then we add some noise to it and use a loss
+function that has the following signature:
+
+#+begin_src python
+loss(traj_observed, state_0, n_steps, dt, params_guess)
+#+end_src
+
+i.e., it takes the made up trajectory and enough to calculate a new
+trajectory with a guessed parameter. Then we can differentiate this
+relative to the parameter and gradient descent our way through to the
+right parameter.
+
+***** Installing Optax
+
+The above was done by hand, and we now install an optimising library
+built on JAX: https://github.com/google-deepmind/optax
+
+#+begin_src bash
+pip install optax
+diff requirements-tmp.txt requirements-dev.txt | grep '^<' | sed -e 's/< //g' > requirements.txt
+#+end_src
+
+**** Experiments with the inverse problem
+- When replacing RK4 with Forward Euler, it didn't seem to make a
+  massive difference.
+- As the noise scale increases, the optimisers are extremely robust.
+- Allowing the system to optimise for both m and k simultaneously
+  cauesd it to find whatever random values (k was close to the true
+  value) that sort of fit.
+*** What Surprised Me
+- Looking at the =jaxpr=s for things is a way to understand what is
+  going on. e.g. Specifically in some sort of differentiation over a
+  loop sense, a single scan (fold) corresponds to two in the internal
+  representation. Notice that one is forward =reverse=False= and one
+  is reverse.
+
+#+begin_src
+    _:f32[2] _:f32[] g:f32[5,2] = scan[
+      _split_transpose=False
+      jaxpr={ lambda ; h:f32[] i:f32[] j:f32[2] k:f32[]. let
+          l:f32[1] = slice[limit_indices=(1,) start_indices=(0,) strides=(1,)] j
+          m:f32[] = squeeze[dimensions=(0,)] l
+          n:f32[1] = slice[limit_indices=(2,) start_indices=(1,) strides=(1,)] j
+          o:f32[] = squeeze[dimensions=(0,)] n
+          p:f32[] = div o h
+          q:f32[] = mul i m
+          r:f32[1] = broadcast_in_dim[
+            broadcast_dimensions=()
+            shape=(1,)
+            sharding=None
+          ] p
+          s:f32[1] = broadcast_in_dim[
+            broadcast_dimensions=()
+            shape=(1,)
+            sharding=None
+          ] q
+          t:f32[2] = concatenate[dimension=0] r s
+          u:f32[2] = mul 0.009999999776482582:f32[] t
+          v:f32[2] = add j u
+          w:f32[] = add k 0.01:f32[]
+        in (v, w, v) }
+      length=5
+      linear=(False, False, False, False)
+      num_carry=2
+      num_consts=2
+      reverse=False
+      unroll=1
+    ] d f a 0.0:f32[]
+
+    cg:f32[2] = scan[
+      _split_transpose=False
+      jaxpr={ lambda ; ch:f32[] ci:f32[] cj:f32[2] ck:f32[2]. let
+          cl:f32[2] = add_any cj ck
+          cm:f32[2] = mul 0.009999999776482582:f32[] cl
+          cn:f32[1] co:f32[1] = split[axis=0 sizes=(1, 1)] cm
+          cp:f32[] = reduce_sum[axes=(np.int64(0),) out_sharding=None] co
+          cq:f32[] = reduce_sum[axes=(np.int64(0),) out_sharding=None] cn
+          cr:f32[] = mul ci cp
+          cs:f32[] = div cq ch
+          ct:f32[1] = broadcast_in_dim[
+            broadcast_dimensions=()
+            shape=(1,)
+            sharding=None
+          ] cs
+          cu:f32[2] = pad[padding_config=((1, np.int64(0), 0),)] ct 0.0:f32[]
+          cv:f32[2] = add_any cl cu
+          cw:f32[1] = broadcast_in_dim[
+            broadcast_dimensions=()
+            shape=(1,)
+            sharding=None
+          ] cr
+          cx:f32[2] = pad[padding_config=((0, np.int64(1), 0),)] cw 0.0:f32[]
+          cy:f32[2] = add_any cv cx
+        in (cy,) }
+      length=5
+      linear=(False, False, True, True)
+      num_carry=1
+      num_consts=2
+      reverse=True
+      unroll=1
+    ] d f cf ce
+  #+end_src
+- Runge-Kutta (RK4) is astonishingly good at conserving energy. After
+  100000 steps, it's off by O(1.e-6).
+- I can crank up noise levels on a trajectory to really high (like
+  =noise_scale=500=) and not have the optimisers fail to find =k=.
+- What was really, really cool is that the dynamics of the system only
+  depend on =sqrt(k/m)=. So when optimising for =k= and =m=
+  simultaneously, even though =m= didn't stay fixed, the ratio of
+  these two were bang on at the reference values.
+*** What Is Confusing or Didn't Work
+**** Loss functions seem kinda arbitrary
+They are scalars that depend on some sort of unsigned distance to some
+truth, but it feels quite unphysical to me to arbitrarily add
+quantities of different types into one scalar.
+**** =jax.linalg.norm= with =ord=2= gets the wrong gradient sign
+I need to better understand how the norm is defined, and I need to
+understand why it was messing with the sign of the gradient of the
+loss.
+**** The Adam optimiser is quite finicky
+- To freeze parameters, we need to mark them with =True=.
+- With a low learning rate, convergence was super slow. Then with a
+  higher rate, it converged rapidly but oscillated. Standard gradient
+  descent was so much smoother.
+*** Open Questions
+*** Refinements to the Vision
+- We need to enforce what is known, otherwise we will find equivalent
+  solutions if a problem is undefined.
