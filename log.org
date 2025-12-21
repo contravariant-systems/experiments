@@ -1,10 +1,16 @@
 * Contravariant Systems: Build Log
 
 ** 2025-12-20: JAX Fundamentals
-
-*** Raw Notes
-
+*** What I Built/Learnt
 **** Installing JAX and development tools
+
+There was a time when Apple had interest in maintaining a Metal
+backend for JAX, which would've allowed things to be GPU accelerated
+as I learnt. But that time has long passed. So for now, it's just a
+[[https://docs.jax.dev/en/latest/installation.html][standard CPU install]] following the most basic steps.
+
+In addition, I install an LSP-server and friends because it helps with
+my introspection as I learn.
 
 #+begin_src shell
 python -m venv venv
@@ -14,17 +20,93 @@ pip install -U "python-lsp-server[all]"
 pip freeze > requirements-dev-tmp.txt
 diff requirements-dev-tmp.txt requirements.txt | grep  '^<' | sed -e 's/< //g' > requirements-dev.txt
 rm requirements-dev-tmp.txt
+pip install -U matplotlib
+# Then some work to update requirements.txt in the same way as above
 #+end_src
 
-*** What I Built/Learnt
+Initially, I wanted to work in Emacs but getting a proper REPL with
+graphics (e.g. Matplotlib) and good understanding of =venv=s was too
+much.
+
+So I moved on to Jupyter notebooks.
+
+It was super-duper complicated to get Jupyter notebooks working
+globally while seeing python packages in the VM, so I ended up just
+installing jupyter lab locally. And even then, this needed to be run
+in hard-coded way:
+
+#+begin_src shell
+./venv/bin/jupyter lab
+#+end_src
+
+**** Going through JAX's quickstart and related reading
+
+I went through the following material in a file called
+=quickstart.ipynb=, which introduced me to many concepts.
+
+- https://docs.jax.dev/en/latest/notebooks/thinking_in_jax.html
+
+In the course of this, it spidered into many, many tabs, so I followed
+through most of them at least at basic level.
+- https://docs.jax.dev/en/latest/key-concepts.html#jax-arrays-jax-array
+- https://docs.jax.dev/en/latest/jit-compilation.html#jit-compilation
+- https://docs.jax.dev/en/latest/jaxpr.html#jax-internals-jaxpr
+- https://docs.jax.dev/en/latest/notebooks/Common_Gotchas_in_JAX.html
+- https://docs.jax.dev/en/latest/automatic-vectorization.html
+- https://docs.jax.dev/en/latest/automatic-differentiation.html
+- https://docs.jax.dev/en/latest/random-numbers.html
+
+**** Creating the most basic mechanical system to exercise JAX semantics
+
+I then tried to recreate the most basic Hamiltonian system, the simple
+harmonic oscillator using JAX and studied it a little. This works
+exists in =sho.py=.
 
 *** What Surprised Me
 
-*** What Broke
-- [error, why it happened, how I fixed it]
+- How useful learning Scheme and functional-ish programming has been
+  to this exercise.
+- How readable (because of the above) the internal =jaxpr=
+  representation is.
+- How rapidly forward Euler builds up energy. Turns out this is a
+  unversal thing for Hamiltonian mechanics. By the same token,
+  backward Euler always loses energy.
+- =jax.grad= is really cool, and it works with gradients essentially
+  related to all input arguments of a function. It, by default, does
+  it relative to the first one, which was confusing, but you can set
+  =argnums= to a list of numbers that correspond to the positions of
+  the arguments.
+- It works even through what feel like weird Python containers like
+  dictionaries??? (This is where my lack of knowledge of =pytrees= is
+  showing.)
+- More deeply though, it doesn't care whether the input is a physical
+  constant or variable or something else entirely. It's just an input
+  and you can differentiate relative to it. It's our human semantics
+  that let us distinguish between "physical constant" and "variable to
+  be learnt."
+
+*** What Is Confusing or Didn't Work
+
+- Emacs is not a great REPL for python.
+- Jupyter and venvs are more convoluted than they should be.
+- Modern JAX is not metal-accelerated on Apple Silicon macs.
+- The internal representation of grad(grad(grad ... f)) gets longer
+  and longer, even though at some point for a polynomial f it has gone
+  to 0.
+- I had to use =defaults write org.python.python ApplePersistenceIgnoreState NO=
+  to prevent a very silly warning.
 
 *** Open Questions
-- [things I don't yet understand]
+
+- How do I represent structural state and hold onto it as we go from
+  symbolic to JAX (MLIR) and back.
+- I really do not understand pytrees
 
 *** Refinements to the Vision
-- [if the day's work changed how I think about Contravariant]
+
+- I am starting to see that some annotations, either at the Sympy
+  level or at the JAX representation level might be what I am after.
+- One example of this is =state_0= is an initial condition, and we
+  need to vary this for sensitivity analysis and =m= and =k= could be
+  either fixed constants or things to be learnt. Either way, the
+  gradient is always available.
