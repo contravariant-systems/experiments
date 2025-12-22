@@ -272,3 +272,126 @@ loss.
 *** Refinements to the Vision
 - We need to enforce what is known, otherwise we will find equivalent
   solutions if a problem is undefined.
+** 2025-12-22: Sympy to JAX Bridge
+
+This is the core of Contravariant's architecture: symbolic
+specification → compiled numerics.
+
+*** What I Built/Learnt
+**** Went through the introductory documentation on Sympy
+- https://docs.sympy.org/latest/tutorials/intro-tutorial/index.html
+- https://docs.sympy.org/latest/tutorials/intro-tutorial/gotchas.html
+- https://docs.sympy.org/latest/explanation/gotchas.html#gotchas
+- https://docs.sympy.org/latest/tutorials/intro-tutorial/basic_operations.html
+- The outcome of these experiments went into =sympy-quickstart.ipynb=.
+***** Installing Sympy
+#+begin_src bash
+pip install sympy
+pip freeze > requirements-tmp.txt
+diff requirements-tmp.txt requirements-dev.txt | grep '^<' | sed -e 's/< //g' > requirements.txt
+rm requirements-tmp.txt
+#+end_src
+
+Remember that we need to start it with the local =sympy=.
+
+#+begin_src bash
+./venv/bin/jupyter lab
+#+end_src
+***** Converting from Sympy to Numpy
+
+This is the crux of the conversion. In =sympy=, you can go from plain
+text to sympy expressions with =sympify()=. And when you need to
+evaluate things, you can use =subs()= followed by =evalf()= but this
+is not fast.
+
+What we actually want to do is to convert from a =sympy=
+representation to a more standard Python (=numpy=) function
+representation, which can then be easily applied to a large set of
+input numbers.
+
+This essentially just converts names of things to be relevant to where
+you're going to use the function. In general, SymPy functions do not
+work with objects from other libraries, such as NumPy arrays, and
+functions from numeric libraries like NumPy or mpmath do not work on
+SymPy expressions. =lambdify= bridges the two by converting a SymPy
+expression to an equivalent numeric function.
+
+#+begin_src python
+a = numpy.arange(20)
+expr = sin(x)
+f = lambdify(x, expr, "numpy")
+f(a)
+#+end_src
+
+**** Describing the physics in terms of Lagrangians in Sympy
+This was fairly straightforward, and compared very favourably with
+doing it by hand.
+*** What Surprised Me
+- Turns out it is undecidable as to whether two symbolic expressions
+  are always equal to each other:
+  https://en.wikipedia.org/wiki/Richardson%27s_theorem
+- This is the deepest thing I learnt today. When we define a
+  Lagrangian, it is a function on state space, i.e. it is
+  parameterised by the the space of =(q, q_qdot)= pairs. You can ask
+  it questions like, given a position and a velocity, what is the
+  Lagrangian?
+
+  Notice you are making no claims as to whether this is a valid
+  trajectory in terms of satisfying any physics. It's just a function
+  in 2D space. In this context, =q= and =q_dot= are independent
+  variables, and independent of one another.
+
+  Once you've figured out a specific trajectory =q(t)=, then
+  =q_dot(t)= is fully defined as just the time derivative of =q=. In
+  this context, they are no longer independent.
+
+  Now the genius bit here is that it's the Euler-Lagrange equation
+  that lives in the boundary between these two contexts. The partial
+  derivatives in the equation =dL/dq= and =dL/dq_dot= are evaluated
+  in the first (independent) context but the total time derivative is
+  evaluated in the second context (along a trajectory)!
+
+  The Euler-Lagrange equation is the stationarity condition, i.e.
+  given we're constrained to paths where the velocity is the time
+  derivative of the position, which paths make the action stationary.
+
+  The variational principle selects, from all possible paths, those
+  that are physically realisable, where the velocity really is the
+  derivative of position, and the acceleration really is what the
+  forces dictate. Oh my god.
+- The move from using Hamiltonians =(q, p)= to Lagrangians =(q,
+  q_dot)= was almost trivial in the numerical integrator code. In both
+  cases, we are trying to evolve the state in state space with the
+  dynamics being defined in terms of the time derivative of this. I
+  expected more work in breaking up the second-order polynomial into
+  two first order ones.
+
+*** What Is Confusing or Didn't Work
+It was really, really hard to work with trajectory-matching loss
+functions. This means that it's really hard to solve optimisation
+problems quickly and generally in this space. There appear to be a lot
+of local minima.
+
+*** Open Questions
+- I still need to understand where in the sympy -> jax representation
+  (a sidecar dictionary?) that I store physics insights about where
+  terms come from.
+*** Refinements to the Vision
+The core of the idea looks something like:
+
+#+begin_src python
+# Symbolic specification
+L = Rational(1,2)*m*(q1_dot**2 + q2_dot**2) - Rational(1,2)*k*(q1**2 + q2**2)
+
+# Structural analysis (Euler-Lagrange)
+eom = derive_equations_of_motion(L, [q1, q2], [q1_dot, q2_dot])
+
+# Code generation
+dynamics = make_dynamics_from_eom(eom)
+
+# Compiled, differentiable simulation
+traj = integrate_rk4(state_0, n_steps, dt, params, dynamics)
+
+# Learning
+grad_loss = grad(loss, argnums=4)(traj_observed, ..., dynamics)
+#+end_src
