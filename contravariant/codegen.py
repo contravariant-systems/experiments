@@ -21,18 +21,18 @@ def make_lagrangian_dynamics_fn(eom):
     Returns:
         JAX-compatible dynamics function
     """
-    solutions = eom['solutions']
-    q_vars = eom['q_vars']
-    q_dot_vars = eom['q_dot_vars']
-    q_ddot_vars = eom['q_ddot_vars']
-    param_syms = eom['param_syms']
+    solutions = eom["solutions"]
+    q_vars = eom["q_vars"]
+    q_dot_vars = eom["q_dot_vars"]
+    q_ddot_vars = eom["q_ddot_vars"]
+    param_syms = eom["param_syms"]
 
     n_dof = len(q_vars)
     q_ddot_exprs = [solutions[qdd] for qdd in q_ddot_vars]
 
     # Build lambdified function
     all_inputs = list(q_vars) + list(q_dot_vars) + list(param_syms)
-    q_ddot_fn = lambdify(all_inputs, q_ddot_exprs, modules='jax')
+    q_ddot_fn = lambdify(all_inputs, q_ddot_exprs, modules="jax")
 
     def dynamics(state, params):
         q_vals = [state[i] for i in range(n_dof)]
@@ -64,13 +64,13 @@ def make_hamiltonian_dynamics_fn(eom, energy_parts):
     """
     from sympy import diff
 
-    q_vars = eom['q_vars']
-    q_dot_vars = eom['q_dot_vars']
-    param_syms = eom['param_syms']
+    q_vars = eom["q_vars"]
+    q_dot_vars = eom["q_dot_vars"]
+    param_syms = eom["param_syms"]
 
     n_dof = len(q_vars)
-    T = energy_parts['T']
-    V = energy_parts['V']
+    T = energy_parts["T"]
+    V = energy_parts["V"]
 
     # For standard kinetic energy T = Σ p²/2m, we have p = m*q_dot
     # So ∂T/∂p = p/m = q_dot
@@ -79,7 +79,7 @@ def make_hamiltonian_dynamics_fn(eom, energy_parts):
     grad_V_exprs = [diff(V, q) for q in q_vars]
 
     all_inputs = list(q_vars) + list(q_dot_vars) + list(param_syms)
-    grad_V_fn = lambdify(all_inputs, grad_V_exprs, modules='jax')
+    grad_V_fn = lambdify(all_inputs, grad_V_exprs, modules="jax")
 
     def dynamics(state, params):
         q_vals = [state[i] for i in range(n_dof)]
@@ -110,9 +110,9 @@ def make_grad_V_fn(eom, energy_parts):
     Returns:
         Function: grad_V(q, params) -> array of shape (n_dof,)
     """
-    q_vars = eom['q_vars']
-    param_syms = eom['param_syms']
-    grad_V_exprs = energy_parts['grad_V']
+    q_vars = eom["q_vars"]
+    param_syms = eom["param_syms"]
+    grad_V_exprs = energy_parts["grad_V"]
 
     n_dof = len(q_vars)
 
@@ -122,15 +122,16 @@ def make_grad_V_fn(eom, energy_parts):
     # For single DOF, lambdify returns scalar; for multi-DOF, returns list
     # We handle both cases uniformly
     if n_dof == 1:
-        grad_V_lambdified = lambdify(all_inputs, grad_V_exprs[0], modules='jax')
+        grad_V_lambdified = lambdify(all_inputs, grad_V_exprs[0], modules="jax")
 
         def grad_V(q, params):
             q_val = q[0]
             param_vals = [params[str(p)] for p in param_syms]
             result = grad_V_lambdified(q_val, *param_vals)
             return jnp.array([result])
+
     else:
-        grad_V_lambdified = lambdify(all_inputs, grad_V_exprs, modules='jax')
+        grad_V_lambdified = lambdify(all_inputs, grad_V_exprs, modules="jax")
 
         def grad_V(q, params):
             q_vals = [q[i] for i in range(n_dof)]
@@ -152,16 +153,16 @@ def make_energy_fn(eom, energy_parts):
     Returns:
         Function: energy(state, params) -> scalar
     """
-    q_vars = eom['q_vars']
-    q_dot_vars = eom['q_dot_vars']
-    param_syms = eom['param_syms']
-    T = energy_parts['T']
-    V = energy_parts['V']
+    q_vars = eom["q_vars"]
+    q_dot_vars = eom["q_dot_vars"]
+    param_syms = eom["param_syms"]
+    T = energy_parts["T"]
+    V = energy_parts["V"]
     H = T + V
 
     n_dof = len(q_vars)
     all_inputs = list(q_vars) + list(q_dot_vars) + list(param_syms)
-    H_fn = lambdify(all_inputs, H, modules='jax')
+    H_fn = lambdify(all_inputs, H, modules="jax")
 
     def energy(state, params):
         q_vals = [state[i] for i in range(n_dof)]

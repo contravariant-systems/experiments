@@ -15,14 +15,13 @@ def derive_equations_of_motion(L, q_vars, q_dot_vars):
     Given a symbolic Lagrangian, derive symbolic accelerations.
     """
 
-    q_ddot_vars = [symbols(f'{qd}_dot') for qd in q_dot_vars]
+    q_ddot_vars = [symbols(f"{qd}_dot") for qd in q_dot_vars]
     accelerations = {}
     for q, q_dot, q_ddot in zip(q_vars, q_dot_vars, q_ddot_vars):
         dL_dq = diff(L, q)
         dL_dq_dot = diff(L, q_dot)
         d_dt_dL_dq_dot = sum(
-            diff(dL_dq_dot, qv) * qv_dot
-            for qv, qv_dot in zip(q_vars, q_dot_vars)
+            diff(dL_dq_dot, qv) * qv_dot for qv, qv_dot in zip(q_vars, q_dot_vars)
         ) + sum(
             diff(dL_dq_dot, qv_dot) * qv_ddot
             for qv_dot, qv_ddot in zip(q_dot_vars, q_ddot_vars)
@@ -34,12 +33,13 @@ def derive_equations_of_motion(L, q_vars, q_dot_vars):
     solutions = solve(list(accelerations.values()), q_ddot_vars)
     return solutions, q_ddot_vars
 
+
 def derive_equations_of_motion_2(L, q_vars, q_dot_vars):
     """
     Given a symbolic Lagrangian, derive symbolic accelerations.
     Returns everything needed to generate dynamics.
     """
-    q_ddot_vars = [symbols(f'{qd}_dot') for qd in q_dot_vars]
+    q_ddot_vars = [symbols(f"{qd}_dot") for qd in q_dot_vars]
 
     # Extract parameter symbols: everything in L that isn't q or q_dot
     all_symbols = L.free_symbols
@@ -50,8 +50,7 @@ def derive_equations_of_motion_2(L, q_vars, q_dot_vars):
         dL_dq = diff(L, q)
         dL_dq_dot = diff(L, q_dot)
         d_dt_dL_dq_dot = sum(
-            diff(dL_dq_dot, qv) * qv_dot
-            for qv, qv_dot in zip(q_vars, q_dot_vars)
+            diff(dL_dq_dot, qv) * qv_dot for qv, qv_dot in zip(q_vars, q_dot_vars)
         ) + sum(
             diff(dL_dq_dot, qv_dot) * qv_ddot
             for qv_dot, qv_ddot in zip(q_dot_vars, q_ddot_vars)
@@ -62,28 +61,29 @@ def derive_equations_of_motion_2(L, q_vars, q_dot_vars):
     solutions = solve(list(accelerations.values()), q_ddot_vars)
 
     return {
-        'solutions': solutions,
-        'q_vars': q_vars,
-        'q_dot_vars': q_dot_vars,
-        'q_ddot_vars': q_ddot_vars,
-        'param_syms': param_syms,
+        "solutions": solutions,
+        "q_vars": q_vars,
+        "q_dot_vars": q_dot_vars,
+        "q_ddot_vars": q_ddot_vars,
+        "param_syms": param_syms,
     }
+
 
 def make_dynamics_from_eom(eom):
     """
     Given result from derive_equations_of_motion, generate JAX dynamics.
     """
-    solutions = eom['solutions']
-    q_vars = eom['q_vars']
-    q_dot_vars = eom['q_dot_vars']
-    q_ddot_vars = eom['q_ddot_vars']
-    param_syms = eom['param_syms']
+    solutions = eom["solutions"]
+    q_vars = eom["q_vars"]
+    q_dot_vars = eom["q_dot_vars"]
+    q_ddot_vars = eom["q_ddot_vars"]
+    param_syms = eom["param_syms"]
 
     n_dof = len(q_vars)
     q_ddot_exprs = [solutions[qdd] for qdd in q_ddot_vars]
 
     all_inputs = list(q_vars) + list(q_dot_vars) + list(param_syms)
-    q_ddot_fn = lambdify(all_inputs, q_ddot_exprs, modules='jax')
+    q_ddot_fn = lambdify(all_inputs, q_ddot_exprs, modules="jax")
 
     def dynamics(state, params):
         q_vals = [state[i] for i in range(n_dof)]
@@ -117,8 +117,8 @@ def dynamics_handwritten(state, params):
     harmonic oscillator by hand.
     """
     q, q_dot = state
-    m, k = params['m'], params['k']
-    return jnp.array([q_dot, -k/m*q])
+    m, k = params["m"], params["k"]
+    return jnp.array([q_dot, -k / m * q])
 
 
 def rk4_step(state, params, dynamics, dt):
@@ -130,11 +130,11 @@ def rk4_step(state, params, dynamics, dt):
     """
 
     k_1 = dynamics(state, params)
-    k_2 = dynamics(state + dt*k_1/2.0, params)
-    k_3 = dynamics(state + dt*k_2/2.0, params)
-    k_4 = dynamics(state + dt*k_3, params)
+    k_2 = dynamics(state + dt * k_1 / 2.0, params)
+    k_3 = dynamics(state + dt * k_2 / 2.0, params)
+    k_4 = dynamics(state + dt * k_3, params)
 
-    return state + dt/6.0*(k_1 + 2.0*k_2 + 2.0*k_3 + k_4)
+    return state + dt / 6.0 * (k_1 + 2.0 * k_2 + 2.0 * k_3 + k_4)
 
 
 # @partial(jit, static_argnums=(1,))
@@ -148,16 +148,18 @@ def integrate_rk4(state_0, n_steps, dt, params, dynamics):
     _, trajectory = scan(step_fn, (state_0, 0), None, length=n_steps)
     return trajectory
 
+
 def loss(traj_observed, state_0, n_steps, dt, params_guess, dynamics):
     traj_guess = integrate_rk4(state_0, n_steps, dt, params_guess, dynamics)
-    return jnp.linalg.norm(traj_observed - traj_guess)**2
+    return jnp.linalg.norm(traj_observed - traj_guess) ** 2
+
 
 # Use sympy to work out the Euler-Lagrange equation from the
 # Lagrangian, and then generate runnable dynamics from it.
-q, q_dot, q_ddot = symbols('q q_dot q_ddot')
-m, k = symbols('m k', positive=True)
+q, q_dot, q_ddot = symbols("q q_dot q_ddot")
+m, k = symbols("m k", positive=True)
 
-L = Rational(1, 2)*m*q_dot**2 - Rational(1, 2)*k*q**2
+L = Rational(1, 2) * m * q_dot**2 - Rational(1, 2) * k * q**2
 
 dL_dq = diff(L, q)
 dL_dq_dot = diff(L, q_dot)
@@ -169,7 +171,7 @@ q_ddot_solution = solve(euler_lagrange, q_ddot)[0]
 dynamics_generated = make_dynamics_generated(q_ddot_solution, q, q_dot, [m, k])
 
 state_0 = jnp.array([1.0, 0.0])
-params = {'m': 1.0, 'k': 2.0}
+params = {"m": 1.0, "k": 2.0}
 n_steps = 1000
 dt = 0.01
 
@@ -186,10 +188,10 @@ traj_generated = integrate_rk4(state_0, n_steps, dt, params, dynamics_generated)
 # plt.ylabel('Position over time (Runge-Kutta 4, Generated Dynamics)')
 # plt.show()
 
-params_true = {'m': 1.0, 'k': 2.0}
+params_true = {"m": 1.0, "k": 2.0}
 traj_observed = integrate_rk4(state_0, n_steps, dt, params_true, dynamics_generated)
 
-params_guess = {'m': 1.0, 'k': 1.0}
+params_guess = {"m": 1.0, "k": 1.0}
 
 grad_loss = grad(loss, argnums=4)
 # print(grad_loss(traj_observed, state_0, n_steps, dt, params_guess, dynamics_generated))
@@ -198,7 +200,9 @@ grad_loss = grad(loss, argnums=4)
 eom = derive_equations_of_motion_2(L, [q], [q_dot])
 dynamics_generated_2 = make_dynamics_from_eom(eom)
 solution, q_dot_dot_vars = derive_equations_of_motion(L, [q], [q_dot])
-dynamics_generated_2 = make_dynamics_generated(solution[q_dot_dot_vars[0]], q, q_dot, [m, k])
+dynamics_generated_2 = make_dynamics_generated(
+    solution[q_dot_dot_vars[0]], q, q_dot, [m, k]
+)
 traj_generated_2 = integrate_rk4(state_0, n_steps, dt, params, dynamics_generated_2)
 # plt.plot(traj_generated_2[:, 0])
 # plt.ylabel('Position over time (Runge-Kutta 4, Generated Dynamics 2)')
@@ -206,15 +210,17 @@ traj_generated_2 = integrate_rk4(state_0, n_steps, dt, params, dynamics_generate
 
 print("Max difference:", jnp.max(jnp.abs(traj_handwritten - traj_generated_2)))
 
-q1, q1_dot, q2, q2_dot = symbols('q1 q1_dot q2 q2_dot')
-m, k = symbols('m k', positive=True)
+q1, q1_dot, q2, q2_dot = symbols("q1 q1_dot q2 q2_dot")
+m, k = symbols("m k", positive=True)
 
-L_iso = Rational(1, 2)*m*(q1_dot**2 + q2_dot**2) - Rational(1, 2)*k*(q1**2 + q2**2)
+L_iso = Rational(1, 2) * m * (q1_dot**2 + q2_dot**2) - Rational(1, 2) * k * (
+    q1**2 + q2**2
+)
 eom_iso = derive_equations_of_motion_2(L_iso, [q1, q2], [q1_dot, q2_dot])
 dynamics_iso = make_dynamics_from_eom(eom_iso)
 
 state_0 = jnp.array([1.0, 2.0, 3.0, 4.0])
-params = {'m': 1.0, 'k': 1.0}
+params = {"m": 1.0, "k": 1.0}
 n_steps = 1000
 dt = 0.01
 traj_iso = integrate_rk4(state_0, n_steps, dt, params, dynamics_iso)
@@ -224,15 +230,17 @@ traj_iso = integrate_rk4(state_0, n_steps, dt, params, dynamics_iso)
 # plt.ylabel('2D Isotropic Oscillator (All DOFs)')
 # plt.show()
 
-params_guess = {'m': 2.0, 'k': 1.0}
+params_guess = {"m": 2.0, "k": 1.0}
 print(grad(loss, argnums=4)(traj_iso, state_0, n_steps, dt, params_guess, dynamics_iso))
 
-q1, q1_dot, q2, q2_dot = symbols('q1 q1_dot q2 q2_dot')
-m, k, k_c = symbols('m k k_c', positive=True)
+q1, q1_dot, q2, q2_dot = symbols("q1 q1_dot q2 q2_dot")
+m, k, k_c = symbols("m k k_c", positive=True)
 
-L_coupled = (Rational(1,2)*m*(q1_dot**2 + q2_dot**2) 
-           - Rational(1,2)*k*(q1**2 + q2**2) 
-           - Rational(1,2)*k_c*(q2 - q1)**2)
+L_coupled = (
+    Rational(1, 2) * m * (q1_dot**2 + q2_dot**2)
+    - Rational(1, 2) * k * (q1**2 + q2**2)
+    - Rational(1, 2) * k_c * (q2 - q1) ** 2
+)
 
 eom_coupled = derive_equations_of_motion_2(L_coupled, [q1, q2], [q1_dot, q2_dot])
 # print(eom_coupled)
@@ -240,7 +248,7 @@ eom_coupled = derive_equations_of_motion_2(L_coupled, [q1, q2], [q1_dot, q2_dot]
 dynamics_coupled = make_dynamics_from_eom(eom_coupled)
 
 state_0 = jnp.array([1.0, 0.0, 0.0, 0.0])  # q1=1, q1_dot=0, q2=0, q2_dot=0
-params = {'m': 1.0, 'k': 1.0, 'k_c': 0.5}
+params = {"m": 1.0, "k": 1.0, "k_c": 0.5}
 n_steps = 2000
 dt = 0.01
 
@@ -254,7 +262,7 @@ traj_coupled = integrate_rk4(state_0, n_steps, dt, params, dynamics_coupled)
 # plt.xlabel('Time step')
 # plt.show()
 
-params_true = {'m': 1.0, 'k': 1.0, 'k_c': 0.5}
+params_true = {"m": 1.0, "k": 1.0, "k_c": 0.5}
 state_0 = jnp.array([1.0, 0.0, 0.0, 0.0])
 n_steps = 20
 dt = 0.01
@@ -265,10 +273,14 @@ key = jax.random.PRNGKey(42)
 noise = 0.05 * jax.random.normal(key, traj_observed.shape)
 traj_observed = traj_observed + noise
 
-params_guess = {'m': 1.0, 'k': 1.0, 'k_c': 0.1}
-print(grad(loss, argnums=4)(traj_observed, state_0, n_steps, dt, params_guess, dynamics_coupled))
+params_guess = {"m": 1.0, "k": 1.0, "k_c": 0.1}
+print(
+    grad(loss, argnums=4)(
+        traj_observed, state_0, n_steps, dt, params_guess, dynamics_coupled
+    )
+)
 
-eta = 1.e-2
+eta = 1.0e-2
 freeze = transforms.freeze
 mask = {"m": True, "k": True, "k_c": False}
 
@@ -284,18 +296,18 @@ opt_state = optimizer.init(params_guess)
 #     if i % 10 == 0:
 #         print(f"k_c={params_guess['k_c']:.6f}")
 
-q, q_dot = symbols('q q_dot')
-m, a, b = symbols('m a b', positive=True)
+q, q_dot = symbols("q q_dot")
+m, a, b = symbols("m a b", positive=True)
 
-V = a*q**4 - b*q**2
-L_dw = Rational(1,2)*m*q_dot**2 - V
+V = a * q**4 - b * q**2
+L_dw = Rational(1, 2) * m * q_dot**2 - V
 
 eom_dw = derive_equations_of_motion_2(L_dw, [q], [q_dot])
-print(eom_dw['solutions'])
+print(eom_dw["solutions"])
 
 dynamics_dw = make_dynamics_from_eom(eom_dw)
 
-params = {'m': 1.0, 'a': 1.0, 'b': 2.0}
+params = {"m": 1.0, "a": 1.0, "b": 2.0}
 n_steps = 2000
 dt = 0.01
 
@@ -309,17 +321,19 @@ traj_low = integrate_rk4(state_low, n_steps, dt, params, dynamics_dw)
 traj_high = integrate_rk4(state_high, n_steps, dt, params, dynamics_dw)
 
 plt.figure()
-plt.plot(traj_low[:, 0], label='low energy')
-plt.plot(traj_high[:, 0], label='high energy')
+plt.plot(traj_low[:, 0], label="low energy")
+plt.plot(traj_high[:, 0], label="high energy")
 plt.legend()
-plt.ylabel('q')
+plt.ylabel("q")
 plt.show()
 
-params_true = {'m': 1.0, 'a': 1.0, 'b': 2.0}
+params_true = {"m": 1.0, "a": 1.0, "b": 2.0}
 state_0 = jnp.array([0.5, 0.0])
 traj_observed = integrate_rk4(state_0, 500, dt, params_true, dynamics_dw)
 
 # Can we learn b?
-params_guess = {'m': 1.0, 'a': 1.0, 'b': 1.0}
-grads = grad(loss, argnums=4)(traj_observed, state_0, 500, dt, params_guess, dynamics_dw)
+params_guess = {"m": 1.0, "a": 1.0, "b": 1.0}
+grads = grad(loss, argnums=4)(
+    traj_observed, state_0, 500, dt, params_guess, dynamics_dw
+)
 print(grads)
