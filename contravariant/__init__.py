@@ -9,6 +9,9 @@ Symbolic specification → Structural analysis → Compiled numerics
 from .symbolic import (
     derive_equations_of_motion,
     extract_kinetic_potential,
+    find_cyclic_coordinates,
+    derive_hamiltonian,
+    conserved_from_symmetry,
 )
 
 from .codegen import (
@@ -16,6 +19,7 @@ from .codegen import (
     make_hamiltonian_dynamics_fn,
     make_grad_V_fn,
     make_energy_fn,
+    make_conserved_quantity_fn,
 )
 
 from .integrators import (

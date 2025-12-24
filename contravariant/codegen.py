@@ -171,3 +171,18 @@ def make_energy_fn(eom, energy_parts):
         return H_fn(*q_vals, *q_dot_vals, *param_vals)
 
     return energy
+
+
+def make_conserved_quantity_fn(expr, q_vars, q_dot_vars, param_syms):
+    """Generate JAX function for a conserved quantity."""
+    n_dof = len(q_vars)
+    all_inputs = list(q_vars) + list(q_dot_vars) + list(param_syms)
+    fn = lambdify(all_inputs, expr, modules='jax')
+
+    def conserved_qty(state, params):
+        q_vals = [state[i] for i in range(n_dof)]
+        q_dot_vals = [state[n_dof + i] for i in range(n_dof)]
+        param_vals = [params[str(p)] for p in param_syms]
+        return fn(*q_vals, *q_dot_vals, *param_vals)
+
+    return conserved_qty

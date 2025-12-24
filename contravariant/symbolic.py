@@ -4,7 +4,65 @@ Symbolic mechanics utilities using sympy.
 Derives equations of motion from Lagrangians via Euler-Lagrange.
 """
 
-from sympy import symbols, diff, solve, simplify
+from sympy import symbols, diff, solve, simplify, expand, trigsimp
+
+
+def is_zero(expr):
+    """Try multiple strategies to determine if expression is zero."""
+    if expr == 0:
+        return True
+    if simplify(expr) == 0:
+        return True
+    if expand(expr) == 0:
+        return True
+    if trigsimp(expr) == 0:
+        return True
+    # Last resort: equals() tries harder
+    if expr.equals(0):
+        return True
+    return False
+
+
+def find_cyclic_coordinates(L, q_vars, q_dot_vars):
+    """
+    Find coordinates that don't appear in L.
+    For each cyclic coordinate, the conjugate momentum is conserved.
+
+    The problem is that, we know from Richardson's theorem that it's
+    undecidable whether two symbolic expressions are equal. So we just
+    try a bunch of things and hope that they suffice in aggregate.
+
+    Unsatisfactory, I know.
+
+    Returns:
+        list of (q, p_expr) tuples where p = ∂L/∂q̇ is conserved
+
+    """
+    cyclic = []
+    for q, q_dot in zip(q_vars, q_dot_vars):
+        dL_dq = diff(L, q)
+        if is_zero(dL_dq):
+            # q is cyclic; conjugate momentum is conserved
+            p = diff(L, q_dot)
+            cyclic.append((q, p))
+    return cyclic
+
+
+def derive_hamiltonian(L, q_vars, q_dot_vars):
+    """
+    Compute H = Σ pᵢq̇ᵢ - L via Legendre transform.
+
+    Returns:
+        H: sympy expression for the Hamiltonian
+        momenta: list of (q_dot, p) pairs
+    """
+    H = -L
+    momenta = []
+    for q_dot in q_dot_vars:
+        p = diff(L, q_dot)
+        H = H + p * q_dot
+        momenta.append((q_dot, p))
+    return simplify(H), momenta
 
 
 def derive_equations_of_motion(L, q_vars, q_dot_vars):
@@ -58,6 +116,9 @@ def derive_equations_of_motion(L, q_vars, q_dot_vars):
     # Solve the system for accelerations
     solutions = solve(list(accelerations.values()), q_ddot_vars)
 
+    cyclic = find_cyclic_coordinates(L, q_vars, q_dot_vars)
+    H, momenta = derive_hamiltonian(L, q_vars, q_dot_vars)
+
     return {
         "solutions": solutions,
         "q_vars": q_vars,
@@ -65,6 +126,9 @@ def derive_equations_of_motion(L, q_vars, q_dot_vars):
         "q_ddot_vars": q_ddot_vars,
         "param_syms": param_syms,
         "lagrangian": L,
+        "cyclic_coords": cyclic,
+        "hamiltonian": H,
+        "momenta": momenta,
     }
 
 
@@ -107,3 +171,23 @@ def extract_kinetic_potential(L, q_vars, q_dot_vars):
         "is_separable": not T_depends_on_q,
         "grad_V": grad_V,
     }
+
+
+def conserved_from_symmetry(L, q_vars, q_dot_vars, xi):
+    """
+    Given infinitesimal generator ξ, compute Noether charge Q = Σ pᵢξᵢ.
+
+    Args:
+        L: Lagrangian
+        q_vars: [q1, q2, ...]
+        q_dot_vars: [q1_dot, q2_dot, ...]
+        xi: [ξ1, ξ2, ...] generator of the symmetry
+
+    Returns:
+        Q: conserved quantity
+    """
+    Q = 0
+    for q_dot, xi_i in zip(q_dot_vars, xi):
+        p_i = diff(L, q_dot)
+        Q = Q + p_i * xi_i
+    return simplify(Q)
