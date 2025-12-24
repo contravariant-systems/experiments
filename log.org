@@ -578,3 +578,121 @@ does
 *** Refinements to the Vision
 - We don't penalise the drift. We chose an integrator that
   geometrically /cannot/ drift.
+** 2025-12-24: Noether's Theorem as an Algorithm
+Today, we use Noether's theorem to identify what quantities ought to
+be conserved, and verify them numerically. We then use these
+quantities to completely change the game on parameter discovery.
+
+*** What I Built/Learnt
+**** Reading about Noether's theorem
+- https://en.wikipedia.org/wiki/Noether%27s_theorem
+
+  Noether’s theorem says that for a system with conservative forces
+  (described by an action/Lagrangian), every continuous, smooth
+  symmetry of the action implies a corresponding conserved quantity.
+  It underpins much of modern theoretical physics by linking
+  symmetries to conservation laws, but it generally doesn’t apply to
+  dissipative (non-conservative) systems where a Lagrangian alone
+  isn’t enough.
+
+  And because it makes these connections, you can e.g. use the
+  knowledge that something is conserved to restrict/suggest functional
+  forms of the Lagrangian. (Similarly the other way around, of course.)
+
+  Specifically:
+
+  - Time translation → energy
+  - Space translation → momentum
+  - Rotation → angular momentum
+- https://mitp-content-server.mit.edu/books/content/sectbyfn/books_pres_0/9579/sicm_edition_2.zip/chapter001.html#h1-6c
+- https://en.wikipedia.org/wiki/Lagrangian_mechanics#Cyclic_coordinates_and_conserved_momenta
+
+  If a generalised coordinate is not present in the functional form of
+  the Lagrangian, it's corresponding conjugate momentum is conserved.
+**** Some salient points
+***** Noether's Theorem: Key Concepts
+****** Cyclic coordinates (simplest case)
+If $\frac{\partial L}{\partial q_i} = 0$, coordinate $q_i$ doesn't
+appear in $L$. This is a symmetry: translations in $q_i$ leave physics
+unchanged. The conjugate momentum $p_i = \frac{\partial L}{\partial
+\dot{q}_i}$ is conserved.
+
+****** General symmetries
+A continuous symmetry is a direction you can "nudge" the trajectory
+without changing the action. The conserved quantity is the projection
+of the system's momenta onto the symmetry's infinitesimal generator:
+$$Q = \sum_i p_i \xi_i$$ where $\xi_i =
+\frac{d}{ds}F_s(q_i)\big|_{s=0}$ is the generator.
+
+****** 3. Why energy is special
+- Space translation ($x \to x + \epsilon$): conserves momentum
+  (component of motion in that direction)
+- Time translation ($t \to t + \epsilon$): conserves energy (the
+  Hamiltonian)
+
+Energy is tied to invariance under "when"—whether $L$ has explicit
+time dependence. Break that, and energy conservation fails.
+
+***** SICM's approach
+- Lagrangian as a procedure on local state $(t, q, \dot{q})$
+- Operators that differentiate symbolically
+- For Noether: provide transformation family $F_s$, differentiate at
+  $s=0$ to get generator $\xi$, compute $p \cdot \xi$
+
+**** Expanding the symbolic mechanics with some numerical verification
+***** Detecting cyclic coordinates
+This is really straightforward. We just loop over all the coordinates
+and take the derivative of L with respect to each of them. We can
+easily identify all of the cases where the derivative is 0.
+
+Except it's not as trivial because telling if an expression is 0 is
+not decidable.
+***** Deriving the Hamiltonian from the Lagrangian
+This is a straightforward Legendre transform.
+***** Find the quantity conserved by a symmetry
+Given an infinitesimal generator, ξ, compute the Noether charge (the
+conserved quantity). Then we systematically and numerically verified
+this on a real trajectory.
+***** Time translation is special
+We verified this numerically in Day 4.
+**** The clear pattern for specifying a symmetry
+
+1. Write the finite transformation $q \to F_\epsilon(q)$
+2. Expand to first order in $\epsilon$
+3. Extract the coefficient: $\xi = \frac{d}{d\epsilon}F_\epsilon(q)\big|_{\epsilon=0}$
+
+For translation in $x$: $F_\epsilon(x) = x + \epsilon$, so $\xi = (1, 0)$.
+
+For rotation: $\xi = (-y, x)$.
+**** Trying for loss functions that are more robust than trajectory differences
+In the previous days, I have struggled with the flakiness of parameter
+estimation based on a loss function that was a squared
+trajectory-difference.
+
+Today, instead of matching trajectories point-by-point, I try to match
+by statistics that don't depend on phase. And it worked gloriously!
+*** What Surprised Me
+- It's non-trivial (and in fact undecidable) as to whether we can tell
+  if a generic expression is 0. This is Richardson's theorem from Day
+  3, but I was reminded of it again.
+- With Verlet integration in the 2D oscillator example, angular
+  momentum error was bounded at O(1e-5) over 10 million steps. The
+  oscillatory, non-drifting character showed the symplectic integrator
+  respecting the structure.
+- Using an energy statistic made the parameter discovery so much
+  faster. Physics tells us what is invariant. And we use that
+  invariance in our loss function, and the optimisation landscape
+  respects the physics instead of fighting it.
+
+  This was the most glorious finding of the day.
+*** What Is Confusing or Didn't Work
+- I am not completely confident on how to specify the infinitesimal
+  generator, ξ. I have a general pattern now, but I need to study it
+  further with more complex examples.
+*** Open Questions
+- It's interesting to me how all of this theory is in
+  conservative/non-dissipative systems. I am curious how it extends to
+  realistic systems.
+*** Refinements to the Vision
+- It's clearer I need a =System= object that carries the Lagrangian
+  and its derived structure together.
