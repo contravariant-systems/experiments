@@ -102,7 +102,7 @@ plot_energy_error(traj_2d, conserved_quantity_fn, params)
 # Energy conservation from time translation
 # ---------------------------------------------------------------------
 
-t = symbols('t')
+t = symbols("t")
 
 print("∂L/∂t =", diff(L_sho, t))
 print("Autonomous?", diff(L_sho, t) == 0)
@@ -124,7 +124,7 @@ integrate_rk4 = make_rk4_integrator(dynamics)
 
 # Generate observed trajectory with k_true = 2.0
 state_0 = jnp.array([1.0, 0.0])
-params_true = {'m': 1.0, 'k': 2.0}
+params_true = {"m": 1.0, "k": 2.0}
 n_steps = 1000
 dt = 0.01
 
@@ -134,19 +134,19 @@ traj_observed = integrate_rk4(state_0, n_steps, dt, params_true)
 # Trajectory matching loss (what we used before)
 def trajectory_loss(params_guess):
     traj_pred = integrate_rk4(state_0, n_steps, dt, params_guess)
-    return jnp.sum((traj_pred - traj_observed)**2)
+    return jnp.sum((traj_pred - traj_observed) ** 2)
 
 
 # Energy-statistic loss (phase-invariant)
 def energy_statistic_loss(params_guess):
     traj_pred = integrate_rk4(state_0, n_steps, dt, params_guess)
-    mean_p2_pred = jnp.mean(traj_pred[:, 1]**2)
-    mean_p2_obs = jnp.mean(traj_observed[:, 1]**2)
-    return (mean_p2_pred - mean_p2_obs)**2
+    mean_p2_pred = jnp.mean(traj_pred[:, 1] ** 2)
+    mean_p2_obs = jnp.mean(traj_observed[:, 1] ** 2)
+    return (mean_p2_pred - mean_p2_obs) ** 2
 
 
 # Compare gradients starting far from true k
-params_guess = {'m': 1.0, 'k': 0.5}  # Far from k_true=2.0
+params_guess = {"m": 1.0, "k": 0.5}  # Far from k_true=2.0
 
 print("Trajectory loss gradient:", grad(trajectory_loss)(params_guess))
 print("Energy stat loss gradient:", grad(energy_statistic_loss)(params_guess))
@@ -156,9 +156,9 @@ print("Energy stat loss gradient:", grad(energy_statistic_loss)(params_guess))
 k_traj = 0.5
 lr_traj = 1e-6  # small because gradient is huge
 print("Trajectory matching:")
-for i in range(25):
-    params_guess = {'m': 1.0, 'k': k_traj}
-    g = grad(trajectory_loss)(params_guess)['k']
+for i in range(24):
+    params_guess = {"m": 1.0, "k": k_traj}
+    g = grad(trajectory_loss)(params_guess)["k"]
     k_traj = k_traj - lr_traj * g
     if i % 2 == 0:
         print(f"  step {i}: k = {k_traj:.4f}")
@@ -168,8 +168,8 @@ k_energy = 0.5
 lr_energy = 0.5  # can be much larger
 print("\nEnergy statistic matching:")
 for i in range(24):
-    params_guess = {'m': 1.0, 'k': k_energy}
-    g = grad(energy_statistic_loss)(params_guess)['k']
+    params_guess = {"m": 1.0, "k": k_energy}
+    g = grad(energy_statistic_loss)(params_guess)["k"]
     k_energy = k_energy - lr_energy * g
     if i % 2 == 0:
         print(f"  step {i}: k = {k_energy:.4f}")

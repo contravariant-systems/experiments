@@ -157,8 +157,7 @@ n_steps = 100000
 dt = 0.01
 
 traj_rk4_2d = integrate_rk4_2d(state_0_2d, n_steps, dt, params)
-traj_verlet_2d = integrate_verlet_2d(
-    state_0_2d, n_steps, dt, params, mass_matrix_2d)
+traj_verlet_2d = integrate_verlet_2d(state_0_2d, n_steps, dt, params, mass_matrix_2d)
 
 compare_energy_errors(
     [traj_rk4_2d, traj_verlet_2d],
@@ -172,32 +171,33 @@ compare_energy_errors(
 # Extend to multi-DOF: Double pendulum
 # ---------------------------------------------------------------------
 
-theta1, theta1_dot, theta2, theta2_dot = symbols(
-    'theta1 theta1_dot theta2 theta2_dot')
-m1, m2, l1, l2, g = symbols('m1 m2 l1 l2 g', positive=True)
+theta1, theta1_dot, theta2, theta2_dot = symbols("theta1 theta1_dot theta2 theta2_dot")
+m1, m2, l1, l2, g = symbols("m1 m2 l1 l2 g", positive=True)
 
 # Double pendulum Lagrangian (simplified, equal masses and lengths)
 # T depends on theta1, theta2 (not separable!)
-L_dp = (Rational(1, 2)*(m1 + m2)*l1**2*theta1_dot**2
-        + Rational(1, 2)*m2*l2**2*theta2_dot**2
-        + m2*l1*l2*theta1_dot*theta2_dot*cos(theta1 - theta2)
-        - (m1 + m2)*g*l1*(1 - cos(theta1))
-        - m2*g*l2*(1 - cos(theta2)))
+L_dp = (
+    Rational(1, 2) * (m1 + m2) * l1**2 * theta1_dot**2
+    + Rational(1, 2) * m2 * l2**2 * theta2_dot**2
+    + m2 * l1 * l2 * theta1_dot * theta2_dot * cos(theta1 - theta2)
+    - (m1 + m2) * g * l1 * (1 - cos(theta1))
+    - m2 * g * l2 * (1 - cos(theta2))
+)
 
 
-eom_dp = derive_equations_of_motion(
-    L_dp, [theta1, theta2], [theta1_dot, theta2_dot])
+eom_dp = derive_equations_of_motion(L_dp, [theta1, theta2], [theta1_dot, theta2_dot])
 energy_parts_dp = extract_kinetic_potential(
-    L_dp, [theta1, theta2], [theta1_dot, theta2_dot])
+    L_dp, [theta1, theta2], [theta1_dot, theta2_dot]
+)
 
-print("Separable?", energy_parts_dp['is_separable'])
+print("Separable?", energy_parts_dp["is_separable"])
 
 # Because the above is not separable, the following is not supposed to
 # work, but it still seems to. As in RK4 goes way off, but the Verlet
 # still seems to hold in some oscillatory range.
 
-print("T =", energy_parts_dp['T'])
-print("V =", energy_parts_dp['V'])
+print("T =", energy_parts_dp["T"])
+print("V =", energy_parts_dp["V"])
 
 grad_V_dp = make_grad_V_fn(eom_dp, energy_parts_dp)
 energy_fn_dp = make_energy_fn(eom_dp, energy_parts_dp)
@@ -208,21 +208,14 @@ integrate_verlet_dp = make_verlet_integrator(grad_V_dp, n_dof=2)
 
 # Initial state: [q1, q2, q1_dot, q2_dot]
 state_0_dp = jnp.array([2.5, 2.0, 0.0, 0.0])
-params = {
-    "m1": 1.0,
-    "m2": 1.0,
-    "l1": 1.0,
-    "l2": 1.0,
-    "g": 9.8
-}
+params = {"m1": 1.0, "m2": 1.0, "l1": 1.0, "l2": 1.0, "g": 9.8}
 mass_matrix_dp = jnp.array([params["m1"], params["m2"]])
 
 n_steps = 100000
 dt = 0.1
 
 traj_rk4_dp = integrate_rk4_dp(state_0_dp, n_steps, dt, params)
-traj_verlet_dp = integrate_verlet_dp(
-    state_0_dp, n_steps, dt, params, mass_matrix_dp)
+traj_verlet_dp = integrate_verlet_dp(state_0_dp, n_steps, dt, params, mass_matrix_dp)
 
 compare_energy_errors(
     [traj_rk4_dp, traj_verlet_dp],
@@ -236,35 +229,36 @@ compare_energy_errors(
 # Extend to multi-DOF: Coupled pendulum
 # ---------------------------------------------------------------------
 
-q1, q1_dot, q2, q2_dot = symbols('q1 q1_dot q2 q2_dot')
-m, k, k_c = symbols('m k k_c', positive=True)
+q1, q1_dot, q2, q2_dot = symbols("q1 q1_dot q2 q2_dot")
+m, k, k_c = symbols("m k k_c", positive=True)
 
-L_coupled = (Rational(1, 2)*m*(q1_dot**2 + q2_dot**2)
-             - Rational(1, 2)*k*(q1**2 + q2**2)
-             - Rational(1, 2)*k_c*(q2 - q1)**2)
+L_coupled = (
+    Rational(1, 2) * m * (q1_dot**2 + q2_dot**2)
+    - Rational(1, 2) * k * (q1**2 + q2**2)
+    - Rational(1, 2) * k_c * (q2 - q1) ** 2
+)
 
-energy_parts_coupled = extract_kinetic_potential(
-    L_coupled, [q1, q2], [q1_dot, q2_dot])
+energy_parts_coupled = extract_kinetic_potential(L_coupled, [q1, q2], [q1_dot, q2_dot])
 
-print("T =", energy_parts_coupled['T'])
-print("V =", energy_parts_coupled['V'])
-print("Separable?", energy_parts_coupled['is_separable'])
+print("T =", energy_parts_coupled["T"])
+print("V =", energy_parts_coupled["V"])
+print("Separable?", energy_parts_coupled["is_separable"])
 
 # ---------------------------------------------------------------------
 # Look at phase space plots
 # ---------------------------------------------------------------------
 
 n_particles = 100
-theta_angles = jnp.linspace(0, 2*jnp.pi, n_particles, endpoint=False)
-theta, theta_dot = symbols('theta theta_dot')
-m, l, g = symbols('m l g', positive=True)
+theta_angles = jnp.linspace(0, 2 * jnp.pi, n_particles, endpoint=False)
+theta, theta_dot = symbols("theta theta_dot")
+m, l, g = symbols("m l g", positive=True)
 
-L_pendulum = Rational(1, 2)*m*l**2*theta_dot**2 - m*g*l*(1 - cos(theta))
+L_pendulum = Rational(1, 2) * m * l**2 * theta_dot**2 - m * g * l * (1 - cos(theta))
 
 eom_pend = derive_equations_of_motion(L_pendulum, [theta], [theta_dot])
 energy_parts_pend = extract_kinetic_potential(L_pendulum, [theta], [theta_dot])
 
-print("Separable?", energy_parts_pend['is_separable'])
+print("Separable?", energy_parts_pend["is_separable"])
 
 dynamics_pend = make_lagrangian_dynamics_fn(eom_pend)
 grad_V_pend = make_grad_V_fn(eom_pend, energy_parts_pend)
@@ -273,39 +267,43 @@ integrate_rk4_pend = make_rk4_integrator(dynamics_pend)
 integrate_verlet_pend = make_verlet_integrator(grad_V_pend, n_dof=1)
 
 # Cloud near the unstable equilibrium (top) where nonlinearity is strong
-initial_states_pend = jnp.stack([
-    2.5 + 0.2 * jnp.cos(theta_angles),  # Near top of swing
-    0.0 + 0.2 * jnp.sin(theta_angles)
-], axis=1)
+initial_states_pend = jnp.stack(
+    [
+        2.5 + 0.2 * jnp.cos(theta_angles),  # Near top of swing
+        0.0 + 0.2 * jnp.sin(theta_angles),
+    ],
+    axis=1,
+)
 
-params_pend = {'m': 1.0, 'l': 1.0, 'g': 9.8}
-mass_matrix_pend = jnp.array(
-    [params_pend['m'] * params_pend['l']**2])  # I = ml²
+params_pend = {"m": 1.0, "l": 1.0, "g": 9.8}
+mass_matrix_pend = jnp.array([params_pend["m"] * params_pend["l"] ** 2])  # I = ml²
 
 n_steps = 50000
 dt = 0.01
 
-final_rk4_pend = vmap(lambda s: integrate_rk4_pend(
-    s, n_steps, dt, params_pend)[-1])(initial_states_pend)
-final_verlet_pend = vmap(lambda s: integrate_verlet_pend(
-    s, n_steps, dt, params_pend, mass_matrix_pend)[-1])(initial_states_pend)
+final_rk4_pend = vmap(lambda s: integrate_rk4_pend(s, n_steps, dt, params_pend)[-1])(
+    initial_states_pend
+)
+final_verlet_pend = vmap(
+    lambda s: integrate_verlet_pend(s, n_steps, dt, params_pend, mass_matrix_pend)[-1]
+)(initial_states_pend)
 
 plot_phase_space_cloud(
     initial_states_pend,
     [final_rk4_pend, final_verlet_pend],
-    ['RK4', 'Verlet'],
-    dof_index=0
+    ["RK4", "Verlet"],
+    dof_index=0,
 )
 
 # ---------------------------------------------------------------------
 # Does learning (grad) work across all this new work?
 # ---------------------------------------------------------------------
 
-params_true = {'m': 1.0, 'l': 1.0, 'g': 9.8}
-params_guess = {'m': 1.0, 'l': 1.0, 'g': 8.0}
+params_true = {"m": 1.0, "l": 1.0, "g": 9.8}
+params_guess = {"m": 1.0, "l": 1.0, "g": 8.0}
 
 state_0 = jnp.array([0.5, 0.0])
-mass_matrix = jnp.array([params_true['m'] * params_true['l']**2])
+mass_matrix = jnp.array([params_true["m"] * params_true["l"] ** 2])
 n_steps = 500
 dt = 0.01
 
@@ -314,7 +312,7 @@ traj_observed = integrate_verlet_pend(state_0, n_steps, dt, params_true, mass_ma
 
 def loss_verlet(params):
     traj = integrate_verlet_pend(state_0, n_steps, dt, params, mass_matrix)
-    return jnp.sum((traj - traj_observed)**2)
+    return jnp.sum((traj - traj_observed) ** 2)
 
 
 print("Gradient:", grad(loss_verlet)(params_guess))
