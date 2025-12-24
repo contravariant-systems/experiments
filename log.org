@@ -395,3 +395,186 @@ traj = integrate_rk4(state_0, n_steps, dt, params, dynamics)
 # Learning
 grad_loss = grad(loss, argnums=4)(traj_observed, ..., dynamics)
 #+end_src
+** 2025-12-23: Structure-Preserving Integration
+
+RK4 is accurate but not structure-preserving. Over long times, it
+drifts. Today we built an integrator that respects the geometry of
+Hamiltonian mechanics.
+
+Compare gradient quality: does structure preservation help learning?
+
+*** What I Built/Learnt
+**** Reading up about integrators for Hamiltonian systems
+- https://en.wikipedia.org/wiki/Symplectic_integrator
+
+  Symplectic integrators possess, as a conserved quantity, a
+  Hamiltonian which is slightly perturbed from the original one. By
+  virtue of these advantages, the SI scheme has been widely applied to
+  the calculations of long-term evolution of chaotic Hamiltonian
+  systems ranging from the Kepler problem to the classical and
+  semi-classical simulations in molecular dynamics.
+
+  Most of the usual numerical methods, such as the primitive Euler
+  scheme and the classical Runge–Kutta scheme, are not symplectic
+  integrators.
+
+- https://en.wikipedia.org/wiki/Symplectic_integrator
+- https://en.wikipedia.org/wiki/Verlet_integration
+
+  The Verlet integrator provides good numerical stability, as well as
+  other properties that are important in physical systems such as time
+  reversibility and preservation of the symplectic form on phase
+  space, at no significant additional computational cost over the
+  simple Euler method.
+
+  The form we end up using is called the Velocity Verlet.
+
+- https://link.springer.com/book/10.1007/3-540-30666-8
+- https://www.unige.ch/~hairer/poly_geoint/week1.pdf
+- https://mitp-content-server.mit.edu/books/content/sectbyfn/books_pres_0/9579/sicm_edition_2.zip/chapter003.html#h1-18
+
+  Our motivation for the development of Hamilton’s equations was to
+  focus attention on the quantities that can be conserved—the momenta
+  and the energy. In the Hamiltonian formulation the generalized
+  configuration coordinates and the conjugate momenta comprise the
+  state of the system at a given time. We know from the Lagrangian
+  formulation that if the Lagrangian does not depend on some
+  coordinate then the conjugate momentum is conserved. This is also
+  true in the Hamiltonian formulation, but there is a distinct
+  advantage to the Hamiltonian formulation. In the Lagrangian
+  formulation the knowledge of the conserved momentum does not lead
+  immediately to any simplification of the problem, but in the
+  Hamiltonian formulation the fact that momenta are conserved gives an
+  immediate reduction in the dimension of the system to be solved. In
+  fact, if a coordinate does not appear in the Hamiltonian then the
+  dimension of the system of coupled equations that remain to be
+  solved is reduced by two: the coordinate does not appear and the
+  conjugate momentum is constant.
+
+- https://mitp-content-server.mit.edu/books/content/sectbyfn/books_pres_0/9579/sicm_edition_2.zip/chapter004.html
+- https://scicomp.stackexchange.com/questions/29149/what-does-symplectic-mean-in-reference-to-numerical-integrators-and-does-scip
+**** Some other things I learnt in my reading
+***** What is the symplectic 2-form and why does preserving it matter?
+The symplectic 2-form \omega is the intrinsic geometric structure of
+phase space that turns dH into dynamics and defines the
+Poisson/bracket/area geometry; preserving it means the evolution is a
+true Hamiltonian transformation—volume- and structure-preserving—so it
+keeps the system’s qualitative mechanics faithful, especially over
+long times.
+
+***** What does "bounded energy error" mean precisely?
+As we run a symplectic integrator over time, the deviation
+H(z_n)-H(z_0) stays uniformly bounded in n (typically by something
+small in h), rather than accumulating unboundedly with time. The
+bounded error isn't just bounded—it's /oscillatory/. The integrator
+exactly preserves a slightly perturbed Hamiltonian H~=H+O(hk)\tilde{H}
+= H + O(h^k) H~=H+O(hk), so the true energy oscillates around the
+initial value rather than drifting in one direction.
+
+***** Why does Verlet work for separable Hamiltonians specifically?
+Verlet’s magic is that separability gives you two exact, cheap
+Hamiltonian flows (“kick” and “drift”), and Verlet is the symmetric
+composition that keeps the geometry.
+
+***** What goes wrong for non-separable Hamiltonians?
+
+Verlet’s whole construction relies on the existence of two exact,
+explicit, symplectic subflows. Non-separability destroys that, and
+naive adaptations typically stop being symplectic and start drifting
+qualitatively over long times. You will need other constructions like
+symplectic versions of Runge-Kutta.
+
+**** Completely reorganised the code
+Separated the code out into a core module that can be included and
+reused.
+
+#+begin_src bash
+contravariant
+├── __init__.py
+├── codegen.py
+├── integrators.py
+├── learning.py
+├── plotting.py
+└── symbolic.py
+#+end_src
+
+But in doing this, the language model generated all the code for the
+different sections, so need to proofread and polish it.
+
+**** Studying Verlet vs RK4 in different circumstances
+With the newly modularised code, it was very easy to run the:
+
+- Simple harmonic oscillator
+- 2D Isotropic oscillator
+- Coupled oscillator
+
+For small dt and moderate times, RK4's higher accuracy dominates. The
+symplectic advantage shows when:
+
+- Long times: drift accumulates
+- Larger timesteps: accuracy per step matters less, structure matters more
+- Chaotic systems: where small errors compound exponentially
+
+**** Studying the non-separable case
+
+Verlet requires H = T(p) + V(q) (separable). We then try the double
+pendulum where this condition is not met.
+
+First, the system is smart enough to recognise this(!) when it figures
+out that the terms in the Lagrangian are not separable. This is good
+for Contravariant as this is the sort of thing we will use to identify
+methods.
+
+But when we run it via Verlet anyway on the non-separable double
+pendulum problem, it still tries to oscillate about something, except
+it's the wrong solution.
+
+In summary:
+
+- Coupling in V(q): fine for Verlet. The potential can mix positions
+  however it wants.
+- Coupling in T(q,p): breaks Verlet. The kinetic energy must be
+  T(p) only.
+
+**** Where structure preservation does help learning?
+- Learning from conserved quantities: If you match energy instead of
+  trajectory, Verlet's bounded energy error means the loss surface is
+  smoother.
+- Long-horizon prediction: If you're learning a model to predict far
+  into the future, Verlet won't accumulate drift that corrupts your
+  training signal.
+- Chaotic systems: RK4 on a chaotic system gives nonsense gradients
+  after the Lyapunov time. Verlet at least preserves the statistical
+  structure.
+
+The deeper point: structure preservation helps when your loss function
+respects the structure. Trajectory matching doesn't. Energy matching
+does
+
+*** What Surprised Me
+- Verlet exactly preserves a nearby Hamiltonian H~=H+O(h2)\tilde{H} =
+  H + O(h^2) H~=H+O(h2), so the true energy oscillates around the
+  initial value. RK4 preserves nothing, it's just accurate, and
+  accuracy isn't enough.
+
+*** What Is Confusing or Didn't Work
+- It is not easy to calculate the area of phase space cloud plots, so
+  it's not easy to carefully verify the area conserving properties of
+  symplectic integrators.
+- For trajectory matching with oscillatory systems, the loss landscape is:
+  - Non-convex: multiple minima
+  - Periodic: phase shifts create repeating patterns of good/bad fits
+  - Sensitive to initial guesses
+  So it's actually quite hard to use standard gradient descent and
+  trust the sign of the gradient at any given guess.
+
+*** Open Questions
+
+- I have fetched a copy of a book called "Geometric Numerical
+  Integration" that I need to make time to read. It is well reviewed.
+- I need to read SICM much more carefully, now that I understand
+  Scheme a lot better. Possibly redo parts of it in JAX.
+
+*** Refinements to the Vision
+- We don't penalise the drift. We chose an integrator that
+  geometrically /cannot/ drift.
