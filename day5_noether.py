@@ -5,14 +5,14 @@ import jax.numpy as jnp
 from contravariant import (
     find_cyclic_coordinates,
     derive_hamiltonian,
-    conserved_from_symmetry,
+    derive_conserved_quantity,
     derive_equations_of_motion,
     extract_kinetic_potential,
-    make_grad_V_fn,
-    make_energy_fn,
+    compile_grad_V,
+    compile_energy,
     make_verlet_integrator,
-    make_conserved_quantity_fn,
-    make_lagrangian_dynamics_fn,
+    compile_expression,
+    compile_lagrangian_dynamics,
     make_rk4_integrator,
     plot_trajectory,
     plot_energy_error,
@@ -74,14 +74,14 @@ xi_rotation = [-y, x]
 
 eom_2d = derive_equations_of_motion(L_2d, [x, y], [x_dot, y_dot])
 energy_parts_2d = extract_kinetic_potential(L_2d, [x, y], [x_dot, y_dot])
-Q = conserved_from_symmetry(L_2d, [x, y], [x_dot, y_dot], xi_rotation)
+Q = derive_conserved_quantity(L_2d, [x, y], [x_dot, y_dot], xi_rotation)
 print("Conserved quantity:", Q)
 
 print("Separable?", energy_parts_2d["is_separable"])
 print("∇V =", energy_parts_2d["grad_V"])
 
-grad_V_2d = make_grad_V_fn(eom_2d, energy_parts_2d)
-energy_fn_2d = make_energy_fn(eom_2d, energy_parts_2d)
+grad_V_2d = compile_grad_V(eom_2d, energy_parts_2d)
+energy_fn_2d = compile_energy(eom_2d, energy_parts_2d)
 
 integrate_verlet_2d = make_verlet_integrator(grad_V_2d, n_dof=2)
 
@@ -95,7 +95,7 @@ dt = 0.01
 traj_2d = integrate_verlet_2d(state_0_2d, n_steps, dt, params, mass_matrix_2d)
 # plot_trajectory(traj_2d)
 
-conserved_quantity_fn = make_conserved_quantity_fn(Q, [x, y], [x_dot, y_dot], [m, k])
+conserved_quantity_fn = compile_expression(Q, [x, y], [x_dot, y_dot], [m, k])
 plot_energy_error(traj_2d, conserved_quantity_fn, params)
 
 # ---------------------------------------------------------------------
@@ -119,7 +119,7 @@ print("H =", H)
 
 eom = derive_equations_of_motion(L_sho, [q], [q_dot])
 energy_parts = extract_kinetic_potential(L_sho, [q], [q_dot])
-dynamics = make_lagrangian_dynamics_fn(eom)
+dynamics = compile_lagrangian_dynamics(eom)
 integrate_rk4 = make_rk4_integrator(dynamics)
 
 # Generate observed trajectory with k_true = 2.0

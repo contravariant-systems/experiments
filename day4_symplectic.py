@@ -14,9 +14,9 @@ from sympy import symbols, Rational
 from contravariant import (
     derive_equations_of_motion,
     extract_kinetic_potential,
-    make_lagrangian_dynamics_fn,
-    make_grad_V_fn,
-    make_energy_fn,
+    compile_lagrangian_dynamics,
+    compile_grad_V,
+    compile_energy,
     make_rk4_integrator,
     make_verlet_integrator,
     compare_energy_errors,
@@ -48,9 +48,9 @@ print("∇V =", energy_parts["grad_V"])
 # Generate JAX functions from symbolic expressions
 # ---------------------------------------------------------------------
 
-dynamics = make_lagrangian_dynamics_fn(eom)
-grad_V = make_grad_V_fn(eom, energy_parts)
-energy_fn = make_energy_fn(eom, energy_parts)
+dynamics = compile_lagrangian_dynamics(eom)
+grad_V = compile_grad_V(eom, energy_parts)
+energy_fn = compile_energy(eom, energy_parts)
 
 
 # ---------------------------------------------------------------------
@@ -141,9 +141,9 @@ energy_parts_2d = extract_kinetic_potential(L_2d, [q1, q2], [q1_dot, q2_dot])
 print("Separable?", energy_parts_2d["is_separable"])
 print("∇V =", energy_parts_2d["grad_V"])
 
-dynamics_2d = make_lagrangian_dynamics_fn(eom_2d)
-grad_V_2d = make_grad_V_fn(eom_2d, energy_parts_2d)
-energy_fn_2d = make_energy_fn(eom_2d, energy_parts_2d)
+dynamics_2d = compile_lagrangian_dynamics(eom_2d)
+grad_V_2d = compile_grad_V(eom_2d, energy_parts_2d)
+energy_fn_2d = compile_energy(eom_2d, energy_parts_2d)
 
 integrate_rk4_2d = make_rk4_integrator(dynamics_2d)
 integrate_verlet_2d = make_verlet_integrator(grad_V_2d, n_dof=2)
@@ -199,10 +199,10 @@ print("Separable?", energy_parts_dp["is_separable"])
 print("T =", energy_parts_dp["T"])
 print("V =", energy_parts_dp["V"])
 
-grad_V_dp = make_grad_V_fn(eom_dp, energy_parts_dp)
-energy_fn_dp = make_energy_fn(eom_dp, energy_parts_dp)
+grad_V_dp = compile_grad_V(eom_dp, energy_parts_dp)
+energy_fn_dp = compile_energy(eom_dp, energy_parts_dp)
 
-dynamics_dp = make_lagrangian_dynamics_fn(eom_dp)
+dynamics_dp = compile_lagrangian_dynamics(eom_dp)
 integrate_rk4_dp = make_rk4_integrator(dynamics_dp)
 integrate_verlet_dp = make_verlet_integrator(grad_V_dp, n_dof=2)
 
@@ -260,8 +260,8 @@ energy_parts_pend = extract_kinetic_potential(L_pendulum, [theta], [theta_dot])
 
 print("Separable?", energy_parts_pend["is_separable"])
 
-dynamics_pend = make_lagrangian_dynamics_fn(eom_pend)
-grad_V_pend = make_grad_V_fn(eom_pend, energy_parts_pend)
+dynamics_pend = compile_lagrangian_dynamics(eom_pend)
+grad_V_pend = compile_grad_V(eom_pend, energy_parts_pend)
 
 integrate_rk4_pend = make_rk4_integrator(dynamics_pend)
 integrate_verlet_pend = make_verlet_integrator(grad_V_pend, n_dof=1)
