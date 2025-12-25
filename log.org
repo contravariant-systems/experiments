@@ -359,8 +359,8 @@ doing it by hand.
   that are physically realisable, where the velocity really is the
   derivative of position, and the acceleration really is what the
   forces dictate. Oh my god.
-- The move from using Hamiltonians =(q, p)= to Lagrangians =(q,
-  q_dot)= was almost trivial in the numerical integrator code. In both
+- The move from using Hamiltonians =(q, p)= to Lagrangians =(q, q_dot)=
+  was almost trivial in the numerical integrator code. In both
   cases, we are trying to evolve the state in state space with the
   dynamics being defined in terms of the time derivative of this. I
   expected more work in breaking up the second-order polynomial into
@@ -467,9 +467,9 @@ As we run a symplectic integrator over time, the deviation
 H(z_n)-H(z_0) stays uniformly bounded in n (typically by something
 small in h), rather than accumulating unboundedly with time. The
 bounded error isn't just bounded—it's /oscillatory/. The integrator
-exactly preserves a slightly perturbed Hamiltonian H~=H+O(hk)\tilde{H}
-= H + O(h^k) H~=H+O(hk), so the true energy oscillates around the
-initial value rather than drifting in one direction.
+exactly preserves a slightly perturbed Hamiltonian $\tilde{H} = H +
+O(h^k)$, so the true energy oscillates around the initial value rather
+than drifting in one direction.
 
 ***** Why does Verlet work for separable Hamiltonians specifically?
 Verlet’s magic is that separability gives you two exact, cheap
@@ -622,8 +622,8 @@ unchanged. The conjugate momentum $p_i = \frac{\partial L}{\partial
 A continuous symmetry is a direction you can "nudge" the trajectory
 without changing the action. The conserved quantity is the projection
 of the system's momenta onto the symmetry's infinitesimal generator:
-$$Q = \sum_i p_i \xi_i$$ where $\xi_i =
-\frac{d}{ds}F_s(q_i)\big|_{s=0}$ is the generator.
+$Q = \sum_i p_i \xi_i$ where $\xi_i = \frac{d}{ds}F_s(q_i)\big|_{s=0}$
+is the generator.
 
 ****** 3. Why energy is special
 - Space translation ($x \to x + \epsilon$): conserves momentum
