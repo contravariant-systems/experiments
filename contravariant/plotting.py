@@ -258,15 +258,15 @@ def plot_energy_comparison(
         energies = vmap(lambda s: energy_fn(s, params))(traj)
         ax.plot(energies - E0, label=label, alpha=0.8, linewidth=0.5)
 
-    ax.set_xlabel('Time step')
-    ax.set_ylabel('Energy Error')
-    ax.set_title(title or 'Energy Error Comparison')
+    ax.set_xlabel("Time step")
+    ax.set_ylabel("Energy Error")
+    ax.set_title(title or "Energy Error Comparison")
     ax.legend()
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
 
     if save_as:
-        plt.savefig(f'{save_as}.png', dpi=150)
+        plt.savefig(f"{save_as}.png", dpi=150)
     if show:
         plt.show()
     else:
@@ -302,17 +302,17 @@ def plot_configuration_space(
     i, j = coord_indices
 
     fig, ax = plt.subplots(figsize=(6, 6))
-    ax.plot(traj[:, i], traj[:, j], 'b-', linewidth=0.3, alpha=0.7)
+    ax.plot(traj[:, i], traj[:, j], "b-", linewidth=0.3, alpha=0.7)
 
-    ax.set_xlabel(xlabel or f'$q_{i}$')
-    ax.set_ylabel(ylabel or f'$q_{j}$')
-    ax.set_title(title or 'Configuration Space')
-    ax.axis('equal')
+    ax.set_xlabel(xlabel or f"$q_{i}$")
+    ax.set_ylabel(ylabel or f"$q_{j}$")
+    ax.set_title(title or "Configuration Space")
+    ax.axis("equal")
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
 
     if save_as:
-        plt.savefig(f'{save_as}.png', dpi=150)
+        plt.savefig(f"{save_as}.png", dpi=150)
     if show:
         plt.show()
     else:

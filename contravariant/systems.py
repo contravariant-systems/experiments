@@ -347,6 +347,40 @@ class LagrangianSystem:
         )
 
     # -------------------------------------------------------------------------
+    # Composition
+    # -------------------------------------------------------------------------
+
+    def __add__(self, other):
+        """
+        Compose two non-interacting systems.
+
+        L_total = L_self + L_other
+
+        Coordinates are concatenated. Parameters with the same name
+        become shared (e.g., both having 'm' means same mass). This is
+        standard sympy behavior.
+
+        Args:
+            other: another LagrangianSystem
+
+        Returns:
+            New LagrangianSystem with combined Lagrangian
+
+        Example:
+            >>> sys_x = harmonic_oscillator(coord='x')
+            >>> sys_y = harmonic_oscillator(coord='y')
+            >>> sys_2d = sys_x + sys_y  # 2D isotropic oscillator
+        """
+        if not isinstance(other, LagrangianSystem):
+            return NotImplemented
+
+        L_combined = self.L + other.L
+        q_combined = list(self.q_vars) + list(other.q_vars)
+        q_dot_combined = list(self.q_dot_vars) + list(other.q_dot_vars)
+
+        return LagrangianSystem(L_combined, q_combined, q_dot_combined)
+
+    # -------------------------------------------------------------------------
     # Comparison and Visualization
     # -------------------------------------------------------------------------
 
@@ -381,23 +415,25 @@ class LagrangianSystem:
 
         # Default methods
         if methods is None:
-            methods = ['rk4', 'verlet'] if self.is_separable else ['rk4']
+            methods = ["rk4", "verlet"] if self.is_separable else ["rk4"]
 
         # Filter verlet if not separable
-        if not self.is_separable and 'verlet' in methods:
+        if not self.is_separable and "verlet" in methods:
             print("Note: Verlet unavailable (system not separable)")
-            methods = [m for m in methods if m != 'verlet']
+            methods = [m for m in methods if m != "verlet"]
 
         # Integrate with each method
         trajectories = {}
         for method in methods:
-            trajectories[method] = self.integrate(state_0, n_steps, dt, params, method=method)
+            trajectories[method] = self.integrate(
+                state_0, n_steps, dt, params, method=method
+            )
 
         # Check conservation
         print(f"Integration: {n_steps} steps, dt={dt}, T={n_steps * dt}")
         print()
 
-        all_quantities = ['energy'] + (list(quantities.keys()) if quantities else [])
+        all_quantities = ["energy"] + (list(quantities.keys()) if quantities else [])
         header = f"{'Method':<10}" + "".join(f"{q:>15}" for q in all_quantities)
         print(header)
         print("-" * len(header))
@@ -416,20 +452,20 @@ class LagrangianSystem:
             trajectories,
             self._energy_fn,
             params,
-            title=f'Energy Error ({n_steps} steps)',
-            save_as=f'{save_as}_energy' if save_as else None,
+            title=f"Energy Error ({n_steps} steps)",
+            save_as=f"{save_as}_energy" if save_as else None,
             show=show,
         )
 
         # Plot configuration space
-        best_method = 'verlet' if 'verlet' in trajectories else methods[0]
+        best_method = "verlet" if "verlet" in trajectories else methods[0]
         plot_configuration_space(
             trajectories[best_method],
             coord_indices=(0, 1),
             xlabel=str(self.q_vars[0]),
             ylabel=str(self.q_vars[1]) if self.n_dof > 1 else str(self.q_dot_vars[0]),
-            title='Configuration Space',
-            save_as=f'{save_as}_config' if save_as else None,
+            title="Configuration Space",
+            save_as=f"{save_as}_config" if save_as else None,
             show=show,
         )
 
@@ -447,7 +483,7 @@ class LagrangianSystem:
         dt,
         params_fixed,
         params_init,
-        loss_type='energy_statistic',
+        loss_type="energy_statistic",
         learning_rate=0.1,
         max_iterations=100,
         tolerance=1e-8,

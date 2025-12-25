@@ -163,7 +163,7 @@ def learn_parameters(
     n_dof,
     params_fixed,
     params_init,
-    loss_type='energy_statistic',
+    loss_type="energy_statistic",
     learning_rate=0.1,
     max_iterations=100,
     tolerance=1e-8,
@@ -200,13 +200,14 @@ def learn_parameters(
         return {**params_fixed, **params_learn}
 
     # Build loss function based on type
-    if loss_type == 'trajectory':
+    if loss_type == "trajectory":
+
         def loss_fn(params_learn):
             params = make_full_params(params_learn)
             traj = integrate_fn(state_0, n_steps, dt, params)
             return jnp.mean((traj - traj_observed) ** 2)
 
-    elif loss_type == 'energy_statistic':
+    elif loss_type == "energy_statistic":
         # Precompute observed statistics
         obs_mean_v2 = jnp.mean(jnp.sum(traj_observed[:, n_dof:] ** 2, axis=1))
         obs_mean_q2 = jnp.mean(jnp.sum(traj_observed[:, :n_dof] ** 2, axis=1))
@@ -219,6 +220,7 @@ def learn_parameters(
             return (pred_mean_v2 - obs_mean_v2) ** 2 + (pred_mean_q2 - obs_mean_q2) ** 2
 
     elif callable(loss_type):
+
         def loss_fn(params_learn):
             params = make_full_params(params_learn)
             traj = integrate_fn(state_0, n_steps, dt, params)
@@ -239,7 +241,9 @@ def learn_parameters(
         print(f"Learning: {list(params_init.keys())}")
         print(f"Method: {loss_type if isinstance(loss_type, str) else 'custom'}")
         print()
-        header = f"{'Step':>6} | {'Loss':>12} | " + " | ".join(f"{k:>10}" for k in params_init.keys())
+        header = f"{'Step':>6} | {'Loss':>12} | " + " | ".join(
+            f"{k:>10}" for k in params_init.keys()
+        )
         print(header)
         print("-" * len(header))
 
@@ -247,8 +251,12 @@ def learn_parameters(
     for i in range(max_iterations):
         loss = float(loss_fn_jit(params_learn))
 
-        if verbose and (i % max(1, max_iterations // 10) == 0 or i == max_iterations - 1):
-            values = " | ".join(f"{float(params_learn[k]):>10.4f}" for k in params_init.keys())
+        if verbose and (
+            i % max(1, max_iterations // 10) == 0 or i == max_iterations - 1
+        ):
+            values = " | ".join(
+                f"{float(params_learn[k]):>10.4f}" for k in params_init.keys()
+            )
             print(f"{i:>6} | {loss:>12.2e} | {values}")
 
         if loss < tolerance:
