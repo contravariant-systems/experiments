@@ -846,7 +846,7 @@ When I tried a lot of things at once on the Central Force Problem
   Verlet integrator.
 - The non-separability is coordinate-dependent, not a bug. In polar
   coordinates, $T = \frac{1}{2}m(\dot{r}^2 + r^2\dot{\theta}^2)$
-  depends on r$r$, not just velocities. The same physics in Cartesian
+  depends on $r$, not just velocities. The same physics in Cartesian
   would be separable. This is a deep point: separability is a property
   of the coordinate representation, not the physics.
 - RK4 drift accumulates (which is why structure preservation matters)
