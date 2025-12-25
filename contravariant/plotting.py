@@ -216,3 +216,106 @@ def plot_phase_space_cloud(initial_states, final_states_list, labels, dof_index=
 
     plt.tight_layout()
     plt.show()
+
+
+def plot_energy_comparison(
+    trajectories,
+    energy_fn,
+    params,
+    labels=None,
+    title=None,
+    save_as=None,
+    show=True,
+):
+    """
+    Compare energy errors across multiple trajectories.
+
+    Args:
+        trajectories: dict of {method_name: trajectory} or list of trajectories
+        energy_fn: function (state, params) -> energy
+        params: parameter dict
+        labels: list of labels (required if trajectories is a list)
+        title: plot title
+        save_as: filename to save (without extension)
+        show: whether to display the plot
+
+    Returns:
+        fig, ax: matplotlib figure and axes
+    """
+    # Normalize input to dict
+    if isinstance(trajectories, list):
+        if labels is None:
+            labels = [f"Method {i}" for i in range(len(trajectories))]
+        trajectories = dict(zip(labels, trajectories))
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+
+    # Get E0 from first trajectory
+    first_traj = list(trajectories.values())[0]
+    E0 = energy_fn(first_traj[0], params)
+
+    for label, traj in trajectories.items():
+        energies = vmap(lambda s: energy_fn(s, params))(traj)
+        ax.plot(energies - E0, label=label, alpha=0.8, linewidth=0.5)
+
+    ax.set_xlabel('Time step')
+    ax.set_ylabel('Energy Error')
+    ax.set_title(title or 'Energy Error Comparison')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+
+    if save_as:
+        plt.savefig(f'{save_as}.png', dpi=150)
+    if show:
+        plt.show()
+    else:
+        plt.close()
+
+    return fig, ax
+
+
+def plot_configuration_space(
+    traj,
+    coord_indices=(0, 1),
+    xlabel=None,
+    ylabel=None,
+    title=None,
+    save_as=None,
+    show=True,
+):
+    """
+    Plot trajectory in configuration space.
+
+    Args:
+        traj: trajectory array
+        coord_indices: tuple of (x_index, y_index) into state vector
+        xlabel: x-axis label
+        ylabel: y-axis label
+        title: plot title
+        save_as: filename to save (without extension)
+        show: whether to display the plot
+
+    Returns:
+        fig, ax: matplotlib figure and axes
+    """
+    i, j = coord_indices
+
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.plot(traj[:, i], traj[:, j], 'b-', linewidth=0.3, alpha=0.7)
+
+    ax.set_xlabel(xlabel or f'$q_{i}$')
+    ax.set_ylabel(ylabel or f'$q_{j}$')
+    ax.set_title(title or 'Configuration Space')
+    ax.axis('equal')
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+
+    if save_as:
+        plt.savefig(f'{save_as}.png', dpi=150)
+    if show:
+        plt.show()
+    else:
+        plt.close()
+
+    return fig, ax

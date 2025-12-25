@@ -6,6 +6,8 @@ A framework for executable, differentiable physics.
 Symbolic specification → Structural analysis → Compiled numerics
 """
 
+from .systems import LagrangianSystem
+
 from .symbolic import (
     derive_equations_of_motion,
     extract_kinetic_potential,

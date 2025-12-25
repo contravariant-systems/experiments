@@ -345,3 +345,147 @@ class LagrangianSystem:
             f"  Cyclic coordinates: {cyclic_str}\n"
             f"  Parameters: {param_str}"
         )
+
+    # -------------------------------------------------------------------------
+    # Comparison and Visualization
+    # -------------------------------------------------------------------------
+
+    def compare_integrators(
+        self,
+        state_0,
+        n_steps,
+        dt,
+        params,
+        methods=None,
+        quantities=None,
+        save_as=None,
+        show=True,
+    ):
+        """
+        Compare integration methods on conservation and accuracy.
+
+        Args:
+            state_0: initial state
+            n_steps: number of steps
+            dt: timestep
+            params: parameter dict
+            methods: list of methods to compare (default: auto based on separability)
+            quantities: dict of {name: expr} for additional conserved quantities
+            save_as: filename prefix to save plots (None = don't save)
+            show: whether to display plots
+
+        Returns:
+            dict of {method: trajectory}
+        """
+        from .plotting import plot_energy_comparison, plot_configuration_space
+
+        # Default methods
+        if methods is None:
+            methods = ['rk4', 'verlet'] if self.is_separable else ['rk4']
+
+        # Filter verlet if not separable
+        if not self.is_separable and 'verlet' in methods:
+            print("Note: Verlet unavailable (system not separable)")
+            methods = [m for m in methods if m != 'verlet']
+
+        # Integrate with each method
+        trajectories = {}
+        for method in methods:
+            trajectories[method] = self.integrate(state_0, n_steps, dt, params, method=method)
+
+        # Check conservation
+        print(f"Integration: {n_steps} steps, dt={dt}, T={n_steps * dt}")
+        print()
+
+        all_quantities = ['energy'] + (list(quantities.keys()) if quantities else [])
+        header = f"{'Method':<10}" + "".join(f"{q:>15}" for q in all_quantities)
+        print(header)
+        print("-" * len(header))
+
+        for method in methods:
+            cons = self.check_conservation(trajectories[method], params, quantities)
+            row = f"{method:<10}"
+            for q in all_quantities:
+                max_err, _ = cons[q]
+                row += f"{max_err:>15.2e}"
+            print(row)
+        print()
+
+        # Plot energy comparison
+        plot_energy_comparison(
+            trajectories,
+            self._energy_fn,
+            params,
+            title=f'Energy Error ({n_steps} steps)',
+            save_as=f'{save_as}_energy' if save_as else None,
+            show=show,
+        )
+
+        # Plot configuration space
+        best_method = 'verlet' if 'verlet' in trajectories else methods[0]
+        plot_configuration_space(
+            trajectories[best_method],
+            coord_indices=(0, 1),
+            xlabel=str(self.q_vars[0]),
+            ylabel=str(self.q_vars[1]) if self.n_dof > 1 else str(self.q_dot_vars[0]),
+            title='Configuration Space',
+            save_as=f'{save_as}_config' if save_as else None,
+            show=show,
+        )
+
+        return trajectories
+
+    # -------------------------------------------------------------------------
+    # Parameter Learning
+    # -------------------------------------------------------------------------
+
+    def learn_parameters(
+        self,
+        traj_observed,
+        state_0,
+        n_steps,
+        dt,
+        params_fixed,
+        params_init,
+        loss_type='energy_statistic',
+        learning_rate=0.1,
+        max_iterations=100,
+        tolerance=1e-8,
+        verbose=True,
+    ):
+        """
+        Learn unknown parameters from an observed trajectory.
+
+        Args:
+            traj_observed: observed trajectory array
+            state_0: initial state
+            n_steps: integration steps
+            dt: timestep
+            params_fixed: dict of fixed parameters {'m': 1.0}
+            params_init: dict of initial guesses {'k': 0.5}
+            loss_type: 'trajectory', 'energy_statistic', or callable
+            learning_rate: optimizer learning rate
+            max_iterations: max optimization steps
+            tolerance: stop when loss < tolerance
+            verbose: print progress
+
+        Returns:
+            dict of learned parameters
+        """
+        from .learning import learn_parameters as _learn_parameters
+
+        return _learn_parameters(
+            integrate_fn=self.integrate,
+            traj_observed=traj_observed,
+            state_0=state_0,
+            n_steps=n_steps,
+            dt=dt,
+            n_dof=self.n_dof,
+            params_fixed=params_fixed,
+            params_init=params_init,
+            loss_type=loss_type,
+            learning_rate=learning_rate,
+            max_iterations=max_iterations,
+            tolerance=tolerance,
+            verbose=verbose,
+        )
