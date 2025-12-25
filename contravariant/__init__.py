@@ -11,15 +11,15 @@ from .symbolic import (
     extract_kinetic_potential,
     find_cyclic_coordinates,
     derive_hamiltonian,
-    conserved_from_symmetry,
+    derive_conserved_quantity,
 )
 
 from .codegen import (
-    make_lagrangian_dynamics_fn,
-    make_hamiltonian_dynamics_fn,
-    make_grad_V_fn,
-    make_energy_fn,
-    make_conserved_quantity_fn,
+    compile_lagrangian_dynamics,
+    compile_hamiltonian_dynamics,
+    compile_grad_V,
+    compile_energy,
+    compile_expression,
 )
 
 from .integrators import (

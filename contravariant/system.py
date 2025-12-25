@@ -1,5 +1,5 @@
 """
-The System class: unified interface to Lagrangian mechanics.
+The LagrangianSystem class: unified interface to Lagrangian mechanics.
 
 Novice path: construct with Lagrangian, call integrate(), get correct results.
 Expert path: access all internals, swap integrators, custom loss functions.
@@ -10,13 +10,13 @@ from .symbolic import (
     extract_kinetic_potential,
     find_cyclic_coordinates,
     derive_hamiltonian,
-    conserved_from_symmetry,
+    derive_conserved_quantity,
 )
 from .codegen import (
-    make_lagrangian_dynamics_fn,
-    make_grad_V_fn,
-    make_energy_fn,
-    make_conserved_quantity_fn,
+    compile_lagrangian_dynamics,
+    compile_grad_V,
+    compile_energy,
+    compile_expression,
 )
 from .integrators import (
     make_rk4_integrator,
@@ -27,7 +27,7 @@ import jax.numpy as jnp
 from jax import vmap
 
 
-class System:
+class LagrangianSystem:
     """
     A Lagrangian mechanical system.
 
@@ -39,13 +39,13 @@ class System:
         >>> q, q_dot = symbols('q q_dot')
         >>> m, k = symbols('m k', positive=True)
         >>> L = Rational(1,2)*m*q_dot**2 - Rational(1,2)*k*q**2
-        >>> sys = System(L, [q], [q_dot])
+        >>> sys = LagrangianSystem(L, [q], [q_dot])
         >>> traj = sys.integrate(state_0, n_steps, dt, params)
     """
 
     def __init__(self, L, q_vars, q_dot_vars):
         """
-        Construct a System from a symbolic Lagrangian.
+        Construct a LagrangianSystem from a symbolic Lagrangian.
 
         Args:
             L: sympy expression for the Lagrangian
@@ -68,13 +68,13 @@ class System:
         self.param_syms = self._eom["param_syms"]
 
         # Generate JAX functions (once, at construction)
-        self._dynamics_fn = make_lagrangian_dynamics_fn(self._eom)
-        self._energy_fn = make_energy_fn(self._eom, self._energy_parts)
+        self._dynamics_fn = compile_lagrangian_dynamics(self._eom)
+        self._energy_fn = compile_energy(self._eom, self._energy_parts)
 
         # Separable systems get Verlet capability
         self._is_separable = self._energy_parts["is_separable"]
         if self._is_separable:
-            self._grad_V_fn = make_grad_V_fn(self._eom, self._energy_parts)
+            self._grad_V_fn = compile_grad_V(self._eom, self._energy_parts)
         else:
             self._grad_V_fn = None
 
@@ -84,6 +84,26 @@ class System:
     # -------------------------------------------------------------------------
     # Symbolic properties
     # -------------------------------------------------------------------------
+
+    @property
+    def coordinates(self):
+        """The generalized coordinate symbols [q1, q2, ...]."""
+        return self.q_vars
+
+    @property
+    def velocities(self):
+        """The generalized velocity symbols [q1_dot, q2_dot, ...]."""
+        return self.q_dot_vars
+
+    @property
+    def parameters(self):
+        """The parameter symbols [m, k, ...]."""
+        return self.param_syms
+
+    @property
+    def dof(self):
+        """Degrees of freedom."""
+        return self.n_dof
 
     @property
     def lagrangian(self):
@@ -129,7 +149,7 @@ class System:
     # Numerical functions
     # -------------------------------------------------------------------------
 
-    def dynamics(self, state, params):
+    def evaluate_dynamics(self, state, params):
         """
         Compute d(state)/dt.
 
@@ -142,7 +162,7 @@ class System:
         """
         return self._dynamics_fn(state, params)
 
-    def energy(self, state, params):
+    def evaluate_energy(self, state, params):
         """
         Compute total energy H = T + V.
 
@@ -155,7 +175,7 @@ class System:
         """
         return self._energy_fn(state, params)
 
-    def energy_along_trajectory(self, traj, params):
+    def evaluate_energy_along_trajectory(self, traj, params):
         """Compute energy at each point in a trajectory."""
         return vmap(lambda s: self._energy_fn(s, params))(traj)
 
@@ -248,21 +268,7 @@ class System:
         Returns:
             symbolic expression for the conserved quantity Q = Σ pᵢξᵢ
         """
-        return conserved_from_symmetry(self.L, self.q_vars, self.q_dot_vars, xi)
-
-    def make_conserved_fn(self, Q):
-        """
-        Generate a JAX function for a conserved quantity.
-
-        Args:
-            Q: symbolic expression for conserved quantity
-
-        Returns:
-            function (state, params) -> scalar
-        """
-        return make_conserved_quantity_fn(
-            Q, self.q_vars, self.q_dot_vars, self.param_syms
-        )
+        return derive_conserved_quantity(self.L, self.q_vars, self.q_dot_vars, xi)
 
     def check_conservation(self, traj, params, quantities=None):
         """
@@ -279,7 +285,7 @@ class System:
         results = {}
 
         # Always check energy
-        energies = self.energy_along_trajectory(traj, params)
+        energies = self.evaluate_energy_along_trajectory(traj, params)
         E0 = energies[0]
         max_err = float(jnp.max(jnp.abs(energies - E0)))
         rel_err = max_err / float(jnp.abs(E0)) if E0 != 0 else max_err
@@ -288,7 +294,7 @@ class System:
         # Check additional quantities
         if quantities:
             for name, Q in quantities.items():
-                Q_fn = self.make_conserved_fn(Q)
+                Q_fn = self.compile(Q)
                 values = vmap(lambda s: Q_fn(s, params))(traj)
                 Q0 = values[0]
                 max_err = float(jnp.max(jnp.abs(values - Q0)))
@@ -298,16 +304,42 @@ class System:
         return results
 
     # -------------------------------------------------------------------------
+    # Advanced user functionality
+    # -------------------------------------------------------------------------
+
+    def compile(self, expr):
+        """
+        Compile a symbolic expression to a JAX function.
+
+        The expert escape hatch: turn any sympy expression involving
+        coordinates, velocities, and parameters into a callable.
+
+        Args:
+            expr: sympy expression
+
+        Returns:
+            function (state, params) -> value
+
+        Example:
+            >>> L_z = x*p_y - y*p_x
+            >>> lz_fn = sys.compile(L_z)
+            >>> lz_fn(state, params)
+        """
+        return compile_expression(expr, self.q_vars, self.q_dot_vars, self.param_syms)
+
+    # -------------------------------------------------------------------------
     # Display
     # -------------------------------------------------------------------------
 
     def __repr__(self):
         sep_str = "separable" if self._is_separable else "non-separable"
-        cyclic_str = ", ".join(str(q) for q, p in self._cyclic) if self._cyclic else "none"
+        cyclic_str = (
+            ", ".join(str(q) for q, p in self._cyclic) if self._cyclic else "none"
+        )
         param_str = ", ".join(str(p) for p in self.param_syms)
 
         return (
-            f"System: {self.n_dof} DOF, {sep_str}\n"
+            f"LagrangianSystem: {self.n_dof} DOF, {sep_str}\n"
             f"  L = {self.L}\n"
             f"  H = {self._H}\n"
             f"  Cyclic coordinates: {cyclic_str}\n"

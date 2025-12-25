@@ -173,7 +173,7 @@ def extract_kinetic_potential(L, q_vars, q_dot_vars):
     }
 
 
-def conserved_from_symmetry(L, q_vars, q_dot_vars, xi):
+def derive_conserved_quantity(L, q_vars, q_dot_vars, xi):
     """
     Given infinitesimal generator ξ, compute Noether charge Q = Σ pᵢξᵢ.
 

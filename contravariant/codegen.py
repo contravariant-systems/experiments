@@ -8,7 +8,7 @@ from sympy import lambdify
 import jax.numpy as jnp
 
 
-def make_lagrangian_dynamics_fn(eom):
+def compile_lagrangian_dynamics(eom):
     """
     Given result from derive_equations_of_motion, generate JAX dynamics.
 
@@ -44,7 +44,7 @@ def make_lagrangian_dynamics_fn(eom):
     return dynamics
 
 
-def make_hamiltonian_dynamics_fn(eom, energy_parts):
+def compile_hamiltonian_dynamics(eom, energy_parts):
     """
     Generate Hamiltonian dynamics for separable H = T(p) + V(q).
 
@@ -99,7 +99,7 @@ def make_hamiltonian_dynamics_fn(eom, energy_parts):
     return dynamics
 
 
-def make_grad_V_fn(eom, energy_parts):
+def compile_grad_V(eom, energy_parts):
     """
     Generate a function that computes ∇V(q) for use in symplectic integrators.
 
@@ -142,7 +142,7 @@ def make_grad_V_fn(eom, energy_parts):
     return grad_V
 
 
-def make_energy_fn(eom, energy_parts):
+def compile_energy(eom, energy_parts):
     """
     Generate a function that computes total energy H = T + V.
 
@@ -173,16 +173,27 @@ def make_energy_fn(eom, energy_parts):
     return energy
 
 
-def make_conserved_quantity_fn(expr, q_vars, q_dot_vars, param_syms):
-    """Generate JAX function for a conserved quantity."""
+def compile_expression(expr, q_vars, q_dot_vars, param_syms):
+    """
+    Compile a symbolic expression to a JAX function.
+
+    Args:
+        expr: sympy expression
+        q_vars: coordinate symbols
+        q_dot_vars: velocity symbols
+        param_syms: parameter symbols
+
+    Returns:
+        function (state, params) -> value
+    """
     n_dof = len(q_vars)
     all_inputs = list(q_vars) + list(q_dot_vars) + list(param_syms)
     fn = lambdify(all_inputs, expr, modules="jax")
 
-    def conserved_qty(state, params):
+    def evaluate(state, params):
         q_vals = [state[i] for i in range(n_dof)]
         q_dot_vals = [state[n_dof + i] for i in range(n_dof)]
         param_vals = [params[str(p)] for p in param_syms]
         return fn(*q_vals, *q_dot_vals, *param_vals)
 
-    return conserved_qty
+    return evaluate
