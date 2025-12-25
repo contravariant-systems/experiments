@@ -116,11 +116,11 @@ print("=" * 60)
 print("INTEGRATOR COMPARISON (RK4, varying dt)")
 print("=" * 60)
 
-traj_coarse = sys.integrate(state_0, 1000, 0.1, params, method='rk4')
-traj_fine = sys.integrate(state_0, 10000, 0.01, params, method='rk4')
+traj_coarse = sys.integrate(state_0, 1000, 0.1, params, method="rk4")
+traj_fine = sys.integrate(state_0, 10000, 0.01, params, method="rk4")
 
-conservation_coarse = sys.check_conservation(traj_coarse, params, {'L_z': L_z})
-conservation_fine = sys.check_conservation(traj_fine, params, {'L_z': L_z})
+conservation_coarse = sys.check_conservation(traj_coarse, params, {"L_z": L_z})
+conservation_fine = sys.check_conservation(traj_fine, params, {"L_z": L_z})
 
 print("RK4 (dt=0.1, 1000 steps):")
 for name, (max_err, rel_err) in conservation_coarse.items():
