@@ -579,6 +579,7 @@ does
 - We don't penalise the drift. We chose an integrator that
   geometrically /cannot/ drift.
 ** 2025-12-24: Noether's Theorem as an Algorithm
+
 Today, we use Noether's theorem to identify what quantities ought to
 be conserved, and verify them numerically. We then use these
 quantities to completely change the game on parameter discovery.
@@ -696,3 +697,174 @@ by statistics that don't depend on phase. And it worked gloriously!
 *** Refinements to the Vision
 - It's clearer I need a =System= object that carries the Lagrangian
   and its derived structure together.
+
+** 2025-12-25: Refining Abstractions
+
+We have a few key pieces of symbolic mechanics working. Today, we try
+to compose them into a coherent API. And then we build out a small
+catalogue of common systems. And finally, we get to a place where we
+can compose these systems and analyse the composed system.
+
+*** What I Built/Learnt
+**** Looking at Diffrax to understand how the API feels
+***** Installing Diffrax
+
+#+begin_src bash
+pip install diffrax
+pip freeze > requirements-tmp.txt
+diff requirements-tmp.txt requirements-dev.txt | grep '^<' | sed -e 's/< //g' > requirements.txt
+rm requirements-tmp.txt
+#+end_src
+
+***** Reading
+
+- https://docs.kidger.site/diffrax/usage/getting-started/
+- https://docs.kidger.site/diffrax/api/diffeqsolve/
+
+***** Some opinions and design insights
+
+In general, I do not find its API aesthetically pleasing.
+
+- How does Diffrax separate "what to solve" from "how to solve it"?
+
+  Diffrax has one main entry-point into its API: diffeqsolve(). This
+  takes a lot of parameters that include the first parameter terms,
+  which is a pytree. It can be as simple as a lambda function, but
+  more complex through connecting up terms in a tree through some
+  slightly clunky DSL, e.g. MultiTerm(ODETerm(drift),
+  ControlTerm(diffusion, brownian_motion)). It also has a parameter
+  for the solver to be used, called solver. This is an abstract
+  interface to a set of pre-built solvers.
+
+- What's passed at construction time vs call time?
+
+  Call-time: you build the static objects (ODETerm, Dopri5(), SaveAt,
+  controllers, etc.) and invoke diffeqsolve; if you jit it, this first
+  call also traces your vector field once to build/compile the
+  program. Runtime: the compiled solve then repeatedly evaluates your
+  term(s) (i.e., calls the vector field and any control increments)
+  each step/stage (plus root-finding for implicit methods, step-size
+  control, and saving), with no Python per-step execution.
+
+- How are options like tolerances and step sizes handled?
+
+  They are handled dynamically using a set of methods that conform to
+  an abstract step size controller. You can tell it to be constant (or
+  not), or tell it some initial timestep and some tolerances (relative
+  and absolute) and it will use one of a handful of prescribed
+  algorithms to dynamically vary the stepsize.
+
+**** Converting the standalone functions we've made so far into a coherent system
+
+The goal of this exercise is to make an API that is powerful and
+elegant. It will allow novices to get the right (as in physically
+correct, computationally accurate and efficient) answers without
+knowing the details. Then,later on, as they get expertise, the have
+full control as everything is modular and composable and swappable.
+
+**** A catalogue of common systems
+
+Based on this coherent =LagrangianSystem= class that was built, I then
+built out numerous classic pendulums and oscillators. And now, one can
+do things like:
+
+#+begin_src python
+import jax.numpy as jnp
+from contravariant.catalog import harmonic_oscillator_2d
+
+# One line to get a fully-analysed system
+sys = harmonic_oscillator_2d()
+print(sys)
+print()
+
+# Rotation symmetry → angular momentum
+x, y = sys.coordinates
+L_z = sys.conserved_quantity([-y, x])
+print(f"Angular momentum: L_z = {L_z}")
+print()
+
+# Compare integrators
+params = {'m': 1.0, 'k': 1.0}
+state_0 = jnp.array([1.0, 0.0, 0.0, 1.0])
+
+sys.compare_integrators(
+    state_0, n_steps=100000, dt=0.01, params=params,
+    quantities={'L_z': L_z},
+    save_as='2d_oscillator'
+)
+
+# Learn parameters
+params_true = {'m': 1.0, 'k': 2.0}
+traj_observed = sys.integrate(state_0, 1000, 0.01, params_true)
+
+result = sys.learn_parameters(
+    traj_observed, state_0, n_steps=1000, dt=0.01,
+    params_fixed={'m': 1.0},
+    params_init={'k': 0.5},
+)
+
+print(f"True k = {params_true['k']}, Learned k = {result['k']:.4f}")
+#+end_src
+
+**** A composition system
+
+This was the most beautiful part of the day. By making the individual
+pieces just a bit more customisable (e.g. changing the parameters of a
+1D oscillator) and introducing an =__add()__= to the
+=LagrangianSystem= class, suddenly one can trivially reproduce a 2D
+oscillator from 2 different 1D oscillators /added/ together.
+
+#+begin_src python
+# Compose 2D isotropic oscillator
+sys_x = harmonic_oscillator(coord='x')
+sys_y = harmonic_oscillator(coord='y')
+sys_2d = sys_x + sys_y
+#+end_src
+
+This is glorious!
+
+The composition works because of sympy's symbol caching:
+=symbols('m')= called twice returns the /same/ object. So when adding
+Lagrangians, shared parameter names automatically unify. This is
+mathematically correct—when a physicist writes =L = L_1 + L_2= with
+both containing =m=, they mean the same =m=.
+
+*** What Surprised Me
+
+- What was essentially standalone in the last days came together quite
+  quickly into one standard class for Lagrangian System.
+
+*** What Is Confusing or Didn't Work
+
+**** Problems illustrated by the Central Force Problem
+
+When I tried a lot of things at once on the Central Force Problem
+(Kepler-like), many things didn't work out:
+
+- There's a subtle reason (depending on the coordinates used?) that
+  results in terms being non-separable, which means I couldn't use the
+  Verlet integrator.
+- The non-separability is coordinate-dependent, not a bug. In polar
+  coordinates, $T = \frac{1}{2}m(\dot{r}^2 + r^2\dot{\theta}^2)$
+  depends on r$r$, not just velocities. The same physics in Cartesian
+  would be separable. This is a deep point: separability is a property
+  of the coordinate representation, not the physics.
+- RK4 drift accumulates (which is why structure preservation matters)
+- Statistics-based loss doesn't always result in the right direction
+  of the gradient for optimisation. This does make me feel like the
+  whole business if flaky.
+- Underdetermined problems find a solution, not the solution.
+
+*** Open Questions
+
+Should I contribute to diffrax? I noticed when trying to learn from it
+that Diffrax has only SemiImplicitEuler for symplectic: no
+Störmer-Verlet, no higher-order symplectic methods. Symplectic
+Runge-Kutta (implicit midpoint, Gauss-Legendre), splitting methods
+(Yoshida, Forest-Ruth), and variational integrators are all missing.
+
+*** Refinements to the Vision
+
+There was something very deep about the modularity/composability that
+was shown late today that I would like to never forget and always
+build on.
