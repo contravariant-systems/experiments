@@ -31,11 +31,9 @@ from .integrators import (
 )
 
 from .learning import (
+    learn_parameters,
     trajectory_loss,
-    make_loss_fn,
-    make_loss_fn_with_dynamics,
-    gradient_descent,
-    optimize_with_optax,
+    energy_statistic_loss,
 )
 
 from .plotting import (

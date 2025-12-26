@@ -18,6 +18,29 @@ def trajectory_loss(traj_observed, traj_predicted):
     return jnp.sum((traj_observed - traj_predicted) ** 2)
 
 
+def energy_statistic_loss(traj_observed, traj_predicted, n_dof):
+    """
+    Energy statistic loss: match mean squared positions and velocities.
+
+    More robust than trajectory_loss because it's phase-invariant.
+    Two trajectories with the same energy but different phases will
+    have similar statistics.
+
+    Args:
+        traj_observed: observed trajectory (n_steps, 2*n_dof)
+        traj_predicted: predicted trajectory (n_steps, 2*n_dof)
+        n_dof: degrees of freedom
+
+    Returns:
+        scalar loss
+    """
+    obs_mean_q2 = jnp.mean(jnp.sum(traj_observed[:, :n_dof] ** 2, axis=1))
+    obs_mean_v2 = jnp.mean(jnp.sum(traj_observed[:, n_dof:] ** 2, axis=1))
+    pred_mean_q2 = jnp.mean(jnp.sum(traj_predicted[:, :n_dof] ** 2, axis=1))
+    pred_mean_v2 = jnp.mean(jnp.sum(traj_predicted[:, n_dof:] ** 2, axis=1))
+    return (pred_mean_q2 - obs_mean_q2) ** 2 + (pred_mean_v2 - obs_mean_v2) ** 2
+
+
 def make_loss_fn(integrate_fn, traj_observed, state_0, n_steps, dt):
     """
     Create a loss function for parameter learning.

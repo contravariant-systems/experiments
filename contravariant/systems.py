@@ -184,7 +184,6 @@ class LagrangianSystem:
     # Integration
     # -------------------------------------------------------------------------
 
-
     def integrate(self, state_0, n_steps, dt, params, method="auto", mass_matrix=None):
         """
         Integrate the system forward in time.
@@ -454,15 +453,16 @@ class LagrangianSystem:
             show=show,
         )
 
-        # Plot configuration space
-        best_method = "verlet" if "verlet" in trajectories else methods[0]
+        # Plot configuration/phase space
+        best_method = "yoshida" if "yoshida" in trajectories else methods[0]
+        is_phase_space = (self.n_dof == 1)
         plot_configuration_space(
             trajectories[best_method],
             coord_indices=(0, 1),
             xlabel=str(self.q_vars[0]),
-            ylabel=str(self.q_vars[1]) if self.n_dof > 1 else str(self.q_dot_vars[0]),
-            title="Configuration Space",
-            save_as=f"{save_as}_config" if save_as else None,
+            ylabel=str(self.q_dot_vars[0]) if is_phase_space else str(self.q_vars[1]),
+            title="Phase Space" if is_phase_space else "Configuration Space",
+            save_as=f"{save_as}_{'phase' if is_phase_space else 'config'}" if save_as else None,
             show=show,
         )
 
