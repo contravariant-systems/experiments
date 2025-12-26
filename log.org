@@ -698,7 +698,7 @@ by statistics that don't depend on phase. And it worked gloriously!
 - It's clearer I need a =System= object that carries the Lagrangian
   and its derived structure together.
 
-** 2025-12-25: Refining Abstractions
+** 2025-12-25: Creating the Abstraction
 
 We have a few key pieces of symbolic mechanics working. Today, we try
 to compose them into a coherent API. And then we build out a small
@@ -868,3 +868,251 @@ Runge-Kutta (implicit midpoint, Gauss-Legendre), splitting methods
 There was something very deep about the modularity/composability that
 was shown late today that I would like to never forget and always
 build on.
+
+** 2025-12-26: Refining the Abstraction
+
+Today, we just exercise the system in different ways and sees what
+works and what needs refinement.
+
+*** What I Built/Learnt
+
+**** Surveying the systems we have
+
+When surveying all the systems we have, the following insights pop out:
+
+- Separable systems (simple harmonic, coupled, anharmonic oscillators
+  and simple pendulum) use Verlet integration which results in O(1e-5)
+  to O(1e-4) bounded, oscillatory error.
+- The spherical pendulum is non-separable but integrable. RK4 does
+  fine (6e-6). The cyclic coordinate detection worked beautifully: φ is
+  cyclic, p_φ conserved to 2e-6.
+- The double pendulum is non-separable /and/ chaotic. 5.3e-3 is 1000x
+  worse. This isn't RK4's fault, it's chaos. After the Lyapunov time,
+  trajectories diverge exponentially regardless of integrator.
+
+**** A higher order simplectic integrator (Yoshida Algorithms)
+
+Because we've been comparing a much higher RK4 to the Verlet, all
+results (while shaped ok) look skewed in numeric terms. So today I
+fixed that and implemented one algorithm from Yoshida. This is fourth
+order.
+
+- https://en.wikipedia.org/wiki/Leapfrog_integration#Yoshida_algorithms
+- https://www.sciencedirect.com/science/article/abs/pii/0375960190900923 (can't access)
+
+**** A summary of results
+
+| System              | Separable | Integrator | Energy Err | Learn | Extra Q |
+|---------------------+-----------+------------+------------+-------+---------|
+| SHO                 | ✓         | Both       | O(1e-6)    | ✓     | —       |
+| Coupled Oscillators | ✓         | Both       | O(1e-6)    | ✓     | —       |
+| Anharmonic          | ✓         | Both       | O(1e-6)    | ✓     | —       |
+| Simple Pendulum     | ✓         | Both       | O(1e-6)    | ✓     | —       |
+| Double Pendulum     | ✗         | RK4        | O(1e-3)    | skip  | —       |
+| Spherical Pendulum  | ✗         | RK4        | O(1e-6)    | ✓     | p_φ     |
+
+**** Adding particles to the catalogue
+
+It turns out we can also do particles floating in free space and under
+central forces easily with this system. So now we have a free particle
+in 2d, moving under a central force and Lepler's system as examples.
+
+**** A deeper look at just the double pendulum
+
+This is such a simple extension, at least in the Lagrangian space, but
+it leads to a lot of complexity and beauty:
+
+- Non-separable: kinetic energy couples velocities
+  (l₁l₂m₂θ̇₁θ̇₂cos(θ₁-θ₂)), so only RK4 works
+- RK4 with float64 achieves O(1e-8) energy error over 100s:
+  sufficient for physics
+- Chaos: 1e-9 rad perturbation grows to O(1) in ~23s (exponential,
+  then saturates)
+- Lyapunov exponent λ ≈ 0.7 s⁻¹ means mass × 2.7 error growth each 1.4
+  seconds
+- Phase space: mass 1 oscillates (θ₁ bounded), mass 2 rotates (θ₂
+  unbounded)
+- Energy regimes: low → quasi-periodic, medium → chaotic, high →
+  rotational
+- Loss landscape is fractal: gradient descent cannot find minimum
+- Poincaré section reduces 4D → 2D but needs long integration for
+  structure
+- Parameter learning fundamentally fails for chaos: ∂traj/∂param is
+  uninformative
+
+**** More interesting forms of composition
+
+As of yesterday, we composed systems with adding =LagrangianSystem=
+objects. And this worked for systems that were fundamentally
+decoupled.
+
+Today, this was extended in a way that was trivial in code but quite
+deep in impact. With the generic ability to =add= and =sub= both these
+system objects and just general sympy exprs, we can do what physicists
+do every day, which is to both add Lagrangians and then add (kinetic)
+or subtract (potential) coupling terms.
+
+This allowed us to model more systems.
+
+*** What Surprised Me
+
+**** Double pendulum is a fairly simple extension that ups complexity by a lot
+
+The double pendulum exposes a fundamental limit. For chaotic systems:
+
+- Trajectory accuracy degrades exponentially
+- No integrator fixes this
+- But statistical properties (energy distribution, Lyapunov exponents) can still be meaningful
+
+**** Because of RK4's accuracy, in many practical cases it has better conservation properties
+
+Surprise: RK4 has lower max error than Verlet at 10k steps. This is
+expected short-term—RK4 is O(h⁴) accurate, Verlet is O(h²). The
+symplectic advantage appears at long times when RK4 drifts
+monotonically and Verlet stays bounded. We saw this at 100k steps
+before.
+
+So today, we introduced a higher-order symplectic method, from
+Yoshida.
+
+****  RK4 vs Yoshida: What Symplectic Actually Means
+
+***** The Expectation
+
+Symplectic integrators like Störmer-Verlet and Yoshida preserve the
+symplectic structure of Hamiltonian phase space. The textbook claim is
+that this leads to *bounded* energy error over arbitrarily long times,
+while non-symplectic methods like RK4 accumulate drift. We implemented
+Yoshida (4th-order symplectic) to compare fairly with RK4 (4th-order,
+not symplectic) at the same accuracy order.
+
+***** The Reality
+
+The experiments revealed a more nuanced picture:
+
+****** Simple Harmonic Oscillator (1 billion steps):
+
+#+begin_src
+rk4:     1.90e-05
+yoshida: 2.40e-05
+#+end_src
+
+Both bounded, RK4 slightly better. The SHO is linear, so RK4's errors
+don't compound—they oscillate rather than drift.
+
+****** Anharmonic Oscillator (quartic potential):
+
+#+begin_src
+                   100k        1M          10M
+rk4:             5.25e-06    2.69e-05    2.92e-05
+yoshida:         2.10e-05    1.00e-04    3.29e-04
+#+end_src
+
+RK4 stays bounded; Yoshida's error appears to grow. But plotting the
+error over time reveals both are oscillating around fixed
+offsets—neither is drifting monotonically. RK4 simply has a smaller
+systematic offset for this system.
+
+****** Simple Pendulum (trigonometric nonlinearity)
+
+#+begin_src
+                   100k        1M          10M
+rk4:             5.15e-05    2.40e-04    8.29e-04
+yoshida:         2.72e-04    3.48e-04    3.48e-04
+#+end_src
+
+Here the crossover happens! At 100k steps, RK4 is 5× better. By 10M
+steps, Yoshida is 2.4× better. RK4 drifts (5e-5 → 8e-4 = 16× growth);
+Yoshida stays bounded (2.7e-4 → 3.5e-4 = 1.3× growth).
+
+***** The Explanation
+
+Symplectic integrators exactly preserve a modified Hamiltonian H̃ =
+H + O(h^n), not the true Hamiltonian H. The offset from true energy is
+bounded but nonzero. RK4 is optimized for accuracy (minimizing the
+leading error coefficient). Yoshida is optimized for structure
+preservation (exact conservation of H̃), which may have a larger
+coefficient.
+
+Whether the symplectic advantage manifests depends on:
+
+1. System dynamics: For some systems (pendulum), RK4's small per-step
+   errors accumulate into drift. For others (anharmonic oscillator),
+   RK4 accidentally stays bounded.
+2. Timestep relative to dynamics: The anharmonic oscillator with
+   dt=0.01 showed Yoshida struggling; at dt=0.001, both methods
+   performed comparably. Symplectic integrators still have stability
+   limits.
+3. Integration length: The symplectic advantage requires enough time
+   for RK4's drift to exceed Yoshida's larger constant offset. For
+   short simulations, RK4's smaller constant wins.
+
+***** The Takeaway
+
+Symplectic integration guarantees bounded energy error within the
+stability region, but "bounded" doesn't mean "smallest." RK4 can
+outperform symplectic methods when:
+- The system happens to be well-behaved for RK4
+- The timestep is small enough that drift hasn't accumulated
+- The integration isn't long enough for drift to dominate
+
+The real value of symplectic integration appears in:
+- Celestial mechanics (millions of orbits)
+- Molecular dynamics (billions of steps)
+- Any setting where phase space geometry matters (KAM theory,
+  resonances)
+- Systems where you need *guarantees*, not just good average behaviour
+
+The framework offers both. The default (`method='auto'`) selects
+Yoshida for separable systems—a safe choice that's never
+catastrophically wrong. Experts can select RK4 when they know their
+system and prefer the smaller error constant for shorter integrations.
+
+*** What Is Confusing or Didn't Work
+
+**** It is not clear to me when errors compound
+
+It turns out RK4 is astounding for the simple harmonic oscillator.
+Even after 1B timesteps, it can come out ahead of an equivalent order
+symplectic integrator.
+
+#+begin_src
+In [1]: import jax.numpy as jnp
+
+In [2]: from contravariant.catalog import harmonic_oscillator
+
+In [3]: # Quick test: 1B steps
+   ...: sys = harmonic_oscillator()
+   ...: params = {'m': 1.0, 'k': 1.0}
+   ...: state_0 = jnp.array([1.0, 0.0])
+   ...:
+   ...: for method in ['rk4', 'yoshida']:
+   ...:     traj = sys.integrate(state_0, 1_000_000_000, 0.01, params, method=method)
+   ...:     cons = sys.check_conservation(traj, params)
+   ...:     print(f"{method}: {cons['energy'][0]:.2e}")
+   ...:
+rk4: 1.90e-05
+yoshida: 2.40e-05
+#+end_src
+
+**** Parameter learning failed on the Kepler problem
+
+The sign is wrong and it's not converging. The energy_statistic loss
+(matching mean q² and mean v²) doesn't uniquely identify k for the
+Kepler problem. The loss landscape has local minima or the statistics
+are degenerate for different k values. This is a known limitation of
+statistical loss functions for certain systems. The Kepler problem
+would need a different loss function (maybe period matching, or
+trajectory loss with careful phase alignment).
+
+*** Open Questions
+
+*** Refinements to the Vision
+
+**** This is less visionary, more just a list of things to do
+
+- Loss functions beyond energy_statistic (period matching, orbital
+  elements, Poincaré statistics)
+- Holonomic constraints (pendulum on moving pivot, bead on wire)
+- Implicit integrators for stiff potentials
+- Automatic float64 promotion when chaos detected
