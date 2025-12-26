@@ -12,6 +12,9 @@ from contravariant.catalog import (
     simple_pendulum,
     double_pendulum,
     spherical_pendulum,
+    free_particle_2d,
+    central_force,
+    kepler,
 )
 
 
@@ -30,24 +33,26 @@ sys = harmonic_oscillator()
 print(sys)
 print()
 
-params = {'m': 1.0, 'k': 1.0}
+params = {"m": 1.0, "k": 1.0}
 state_0 = jnp.array([1.0, 0.0])
 
 # Compare integrators
 print("Integrator comparison:")
 trajs = sys.compare_integrators(
-    state_0, n_steps=10000, dt=0.01, params=params,
-    save_as='sho', show=False
+    state_0, n_steps=10000, dt=0.01, params=params, save_as="sho", show=False
 )
 
 # Learn k from trajectory with true k=2.0
 print("Parameter learning:")
-params_true = {'m': 1.0, 'k': 2.0}
+params_true = {"m": 1.0, "k": 2.0}
 traj_obs = sys.integrate(state_0, 1000, 0.01, params_true)
 result = sys.learn_parameters(
-    traj_obs, state_0, n_steps=1000, dt=0.01,
-    params_fixed={'m': 1.0},
-    params_init={'k': 0.5},
+    traj_obs,
+    state_0,
+    n_steps=1000,
+    dt=0.01,
+    params_fixed={"m": 1.0},
+    params_init={"k": 0.5},
     max_iterations=50,
 )
 print(f"True k=2.0, Learned k={result['k']:.4f}")
@@ -62,24 +67,26 @@ sys = coupled_oscillators()
 print(sys)
 print()
 
-params = {'m': 1.0, 'k': 1.0, 'k_c': 0.5}
+params = {"m": 1.0, "k": 1.0, "k_c": 0.5}
 state_0 = jnp.array([1.0, 0.0, 0.0, 0.0])
 
 # Compare integrators
 print("Integrator comparison:")
 trajs = sys.compare_integrators(
-    state_0, n_steps=10000, dt=0.01, params=params,
-    save_as='coupled', show=False
+    state_0, n_steps=10000, dt=0.01, params=params, save_as="coupled", show=False
 )
 
 # Learn coupling constant k_c
 print("Parameter learning (coupling constant):")
-params_true = {'m': 1.0, 'k': 1.0, 'k_c': 0.8}
+params_true = {"m": 1.0, "k": 1.0, "k_c": 0.8}
 traj_obs = sys.integrate(state_0, 1000, 0.01, params_true)
 result = sys.learn_parameters(
-    traj_obs, state_0, n_steps=1000, dt=0.01,
-    params_fixed={'m': 1.0, 'k': 1.0},
-    params_init={'k_c': 0.2},
+    traj_obs,
+    state_0,
+    n_steps=1000,
+    dt=0.01,
+    params_fixed={"m": 1.0, "k": 1.0},
+    params_init={"k_c": 0.2},
     max_iterations=50,
 )
 print(f"True k_c=0.8, Learned k_c={result['k_c']:.4f}")
@@ -94,24 +101,26 @@ sys = anharmonic_oscillator(order=4)
 print(sys)
 print()
 
-params = {'m': 1.0, 'k': 1.0, 'lambda': 0.1}
+params = {"m": 1.0, "k": 1.0, "lambda": 0.1}
 state_0 = jnp.array([1.0, 0.0])
 
 # Compare integrators
 print("Integrator comparison:")
 trajs = sys.compare_integrators(
-    state_0, n_steps=10000, dt=0.01, params=params,
-    save_as='anharmonic', show=False
+    state_0, n_steps=10000, dt=0.01, params=params, save_as="anharmonic", show=False
 )
 
 # Learn anharmonic coefficient
 print("Parameter learning (anharmonic coefficient):")
-params_true = {'m': 1.0, 'k': 1.0, 'lambda': 0.3}
+params_true = {"m": 1.0, "k": 1.0, "lambda": 0.3}
 traj_obs = sys.integrate(state_0, 1000, 0.01, params_true)
 result = sys.learn_parameters(
-    traj_obs, state_0, n_steps=1000, dt=0.01,
-    params_fixed={'m': 1.0, 'k': 1.0},
-    params_init={'lambda': 0.1},
+    traj_obs,
+    state_0,
+    n_steps=1000,
+    dt=0.01,
+    params_fixed={"m": 1.0, "k": 1.0},
+    params_init={"lambda": 0.1},
     max_iterations=50,
 )
 print(f"True λ=0.3, Learned λ={result['lambda']:.4f}")
@@ -126,26 +135,27 @@ sys = simple_pendulum()
 print(sys)
 print()
 
-params = {'m': 1.0, 'l': 1.0, 'g': 9.81}
+params = {"m": 1.0, "l": 1.0, "g": 9.81}
 state_0 = jnp.array([0.5, 0.0])  # moderate angle
 
 # Compare integrators
 print("Integrator comparison:")
 trajs = sys.compare_integrators(
-    state_0, n_steps=10000, dt=0.01, params=params,
-    save_as='pendulum', show=False
+    state_0, n_steps=10000, dt=0.01, params=params, save_as="pendulum", show=False
 )
 
 # Learn gravity
 print("Parameter learning (gravity):")
-params_true = {'m': 1.0, 'l': 1.0, 'g': 9.81}
-params_guess = {'m': 1.0, 'l': 1.0, 'g': 5.0}
+params_true = {"m": 1.0, "l": 1.0, "g": 9.81}
 traj_obs = sys.integrate(state_0, 1000, 0.01, params_true)
 result = sys.learn_parameters(
-    traj_obs, state_0, n_steps=1000, dt=0.01,
-    params_fixed={'m': 1.0, 'l': 1.0},
-    params_init={'g': 5.0},
-    max_iterations=50,
+    traj_obs,
+    state_0,
+    n_steps=1000,
+    dt=0.01,
+    params_fixed={"m": 1.0, "l": 1.0},
+    params_init={"g": 5.0},
+    max_iterations=200,
 )
 print(f"True g=9.81, Learned g={result['g']:.4f}")
 
@@ -159,8 +169,8 @@ sys = double_pendulum()
 print(sys)
 print()
 
-params = {'m1': 1.0, 'm2': 1.0, 'l1': 1.0, 'l2': 1.0, 'g': 9.81}
-state_0 = jnp.array([jnp.pi/2, jnp.pi/2, 0.0, 0.0])
+params = {"m1": 1.0, "m2": 1.0, "l1": 1.0, "l2": 1.0, "g": 9.81}
+state_0 = jnp.array([jnp.pi / 2, jnp.pi / 2, 0.0, 0.0])
 
 # Only RK4 (non-separable)
 print("Integration (RK4 only):")
@@ -170,20 +180,20 @@ print(f"Energy conservation: {cons['energy'][0]:.2e}")
 
 # Visualize chaotic trajectory
 print("Plotting chaotic trajectory...")
-l1, l2 = params['l1'], params['l2']
+l1, l2 = params["l1"], params["l2"]
 x1 = l1 * jnp.sin(traj[:, 0])
 y1 = -l1 * jnp.cos(traj[:, 0])
 x2 = x1 + l2 * jnp.sin(traj[:, 1])
 y2 = y1 - l2 * jnp.cos(traj[:, 1])
 
 fig, ax = plt.subplots(figsize=(8, 8))
-ax.plot(x2, y2, 'b-', linewidth=0.2, alpha=0.7)
-ax.set_xlabel('x')
-ax.set_ylabel('y')
-ax.set_title('Double Pendulum: Tip Trajectory (Chaotic)')
-ax.axis('equal')
+ax.plot(x2, y2, "b-", linewidth=0.2, alpha=0.7)
+ax.set_xlabel("x")
+ax.set_ylabel("y")
+ax.set_title("Double Pendulum: Tip Trajectory (Chaotic)")
+ax.axis("equal")
 ax.grid(True, alpha=0.3)
-plt.savefig('double_pendulum_chaos.png', dpi=150)
+plt.savefig("double_pendulum_chaos.png", dpi=150)
 plt.close()
 
 # Skip learning (chaotic = gradients unreliable)
@@ -200,16 +210,15 @@ print(sys)
 print(f"Cyclic coordinates: {sys.cyclic_coordinates}")
 print()
 
-params = {'m': 1.0, 'l': 1.0, 'g': 9.81}
+params = {"m": 1.0, "l": 1.0, "g": 9.81}
 state_0 = jnp.array([0.5, 0.0, 0.0, 2.0])  # tilted, spinning
 
 # Check both energy and angular momentum
-theta, phi = sys.coordinates
 p_phi_expr = sys.cyclic_coordinates[0][1]  # conserved momentum
 
 print("Integration (RK4 only):")
 traj = sys.integrate(state_0, 10000, 0.01, params)
-cons = sys.check_conservation(traj, params, {'p_phi': p_phi_expr})
+cons = sys.check_conservation(traj, params, {"p_phi": p_phi_expr})
 print(f"Energy conservation: {cons['energy'][0]:.2e}")
 print(f"p_phi conservation: {cons['p_phi'][0]:.2e}")
 
@@ -217,48 +226,134 @@ print(f"p_phi conservation: {cons['p_phi'][0]:.2e}")
 print("Plotting 3D trajectory...")
 theta_vals = traj[:, 0]
 phi_vals = traj[:, 1]
-l = params['l']
+l = params["l"]
 x = l * jnp.sin(theta_vals) * jnp.cos(phi_vals)
 y = l * jnp.sin(theta_vals) * jnp.sin(phi_vals)
 z = -l * jnp.cos(theta_vals)
 
 fig = plt.figure(figsize=(10, 10))
-ax = fig.add_subplot(111, projection='3d')
-ax.plot(x, y, z, 'b-', linewidth=0.3, alpha=0.7)
-ax.set_xlabel('x')
-ax.set_ylabel('y')
-ax.set_zlabel('z')
-ax.set_title('Spherical Pendulum')
-plt.savefig('spherical_pendulum_3d.png', dpi=150)
+ax = fig.add_subplot(111, projection="3d")
+ax.plot(x, y, z, "b-", linewidth=0.3, alpha=0.7)
+ax.set_xlabel("x")
+ax.set_ylabel("y")
+ax.set_zlabel("z")
+ax.set_title("Spherical Pendulum")
+plt.savefig("spherical_pendulum_3d.png", dpi=150)
 plt.close()
 
 # Learn gravity
 print("Parameter learning (gravity):")
-params_true = {'m': 1.0, 'l': 1.0, 'g': 9.81}
+params_true = {"m": 1.0, "l": 1.0, "g": 9.81}
 traj_obs = sys.integrate(state_0, 1000, 0.01, params_true)
 result = sys.learn_parameters(
-    traj_obs, state_0, n_steps=1000, dt=0.01,
-    params_fixed={'m': 1.0, 'l': 1.0},
-    params_init={'g': 5.0},
-    max_iterations=50,
+    traj_obs,
+    state_0,
+    n_steps=1000,
+    dt=0.01,
+    params_fixed={"m": 1.0, "l": 1.0},
+    params_init={"g": 5.0},
+    max_iterations=300,
 )
 print(f"True g=9.81, Learned g={result['g']:.4f}")
 
 
 # =============================================================================
-# SUMMARY
+# 7. FREE PARTICLE 2D (both coordinates cyclic)
 # =============================================================================
-section("SUMMARY")
+section("7. FREE PARTICLE 2D")
 
-print("""
-| System              | Separable | Integrator | Energy Err | Learn | Extra Q |
-|---------------------|-----------|------------|------------|-------|---------|
-| SHO                 | ✓         | Both       | O(1e-5)    | ✓     | —       |
-| Coupled Oscillators | ✓         | Both       | O(1e-5)    | ✓     | —       |
-| Anharmonic          | ✓         | Both       | O(1e-5)    | ✓     | —       |
-| Simple Pendulum     | ✓         | Both       | O(1e-4)    | ✓     | —       |
-| Double Pendulum     | ✗         | RK4        | O(1e-3)    | skip  | —       |
-| Spherical Pendulum  | ✗         | RK4        | O(1e-6)    | ✓     | p_φ     |
-""")
+sys = free_particle_2d()
+print(sys)
+print(f"Cyclic coordinates: {sys.cyclic_coordinates}")
+print()
+
+# Both x and y should be cyclic → p_x and p_y conserved
+assert len(sys.cyclic_coordinates) == 2, "Expected 2 cyclic coordinates!"
+print("✓ Both x and y detected as cyclic")
+
+params = {"m": 1.0}
+state_0 = jnp.array([0.0, 0.0, 1.0, 0.5])  # moving diagonally
+
+# Check all three conserved quantities
+p_x_expr = sys.cyclic_coordinates[0][1]
+p_y_expr = sys.cyclic_coordinates[1][1]
+
+print("\nIntegration:")
+traj = sys.integrate(state_0, 10000, 0.01, params)
+cons = sys.check_conservation(traj, params, {"p_x": p_x_expr, "p_y": p_y_expr})
+print(f"Energy conservation: {cons['energy'][0]:.2e}")
+print(f"p_x conservation: {cons['p_x'][0]:.2e}")
+print(f"p_y conservation: {cons['p_y'][0]:.2e}")
+
+# Plot straight-line trajectory
+print("Plotting trajectory...")
+fig, ax = plt.subplots(figsize=(8, 6))
+ax.plot(traj[:, 0], traj[:, 1], "b-", linewidth=1)
+ax.plot(traj[0, 0], traj[0, 1], "go", markersize=10, label="Start")
+ax.plot(traj[-1, 0], traj[-1, 1], "ro", markersize=10, label="End")
+ax.set_xlabel("x")
+ax.set_ylabel("y")
+ax.set_title("Free Particle: Straight Line Motion")
+ax.legend()
+ax.grid(True, alpha=0.3)
+ax.axis("equal")
+plt.savefig("free_particle_2d.png", dpi=150)
+plt.close()
+
+
+# =============================================================================
+# 8. KEPLER PROBLEM (central force, angular momentum conserved)
+# =============================================================================
+section("8. KEPLER PROBLEM")
+
+sys = kepler()
+print(sys)
+print(f"Cyclic coordinates: {sys.cyclic_coordinates}")
+print()
+
+# theta should be cyclic → p_theta (angular momentum) conserved
+assert len(sys.cyclic_coordinates) == 1, "Expected 1 cyclic coordinate (theta)!"
+assert "theta" in str(sys.cyclic_coordinates[0][0]), "Expected theta to be cyclic!"
+print("✓ θ detected as cyclic (angular momentum conserved)")
+
+params = {"m": 1.0, "k": 1.0}
+# Elliptical orbit initial conditions
+r0 = 1.0
+v_theta0 = 1.2  # tangential velocity for ellipse
+state_0 = jnp.array([r0, 0.0, 0.0, v_theta0])
+
+# Check energy and angular momentum
+p_theta_expr = sys.cyclic_coordinates[0][1]
+
+print("\nIntegration:")
+traj = sys.integrate(state_0, 50000, 0.001, params)  # smaller dt for Kepler
+cons = sys.check_conservation(traj, params, {"p_theta": p_theta_expr})
+print(f"Energy conservation: {cons['energy'][0]:.2e}")
+print(f"p_θ conservation: {cons['p_theta'][0]:.2e}")
+
+# Convert to Cartesian and plot orbit
+print("Plotting orbit...")
+r_vals = traj[:, 0]
+theta_vals = traj[:, 1]
+x = r_vals * jnp.cos(theta_vals)
+y = r_vals * jnp.sin(theta_vals)
+
+fig, ax = plt.subplots(figsize=(8, 8))
+ax.plot(x, y, "b-", linewidth=0.5, alpha=0.7)
+ax.plot(0, 0, "yo", markersize=15, label="Central body")
+ax.plot(x[0], y[0], "go", markersize=8, label="Start")
+ax.set_xlabel("x")
+ax.set_ylabel("y")
+ax.set_title("Kepler Problem: Elliptical Orbit")
+ax.legend()
+ax.grid(True, alpha=0.3)
+ax.axis("equal")
+plt.savefig("kepler_orbit.png", dpi=150)
+plt.close()
+
+
+# Learn k (gravitational parameter)
+# NOTE: energy_statistic loss struggles with Kepler - would need period-based loss
+print("Parameter learning: SKIPPED (energy_statistic loss unsuitable)")
 
 print("All plots saved. Survey complete.")
