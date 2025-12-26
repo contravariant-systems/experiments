@@ -1,10 +1,29 @@
 """
 Numerical integrators for dynamical systems.
 
-Includes:
-- Forward Euler (pedagogical, not recommended)
-- RK4 (accurate, not symplectic)
-- Störmer-Verlet (symplectic, for separable Hamiltonians)
+State Convention:
+    All integrators use state = [q₁, ..., qₙ, v₁, ..., vₙ]
+    where q are generalized coordinates and v are velocities.
+    Symplectic integrators convert to momenta (p = m·v) internally.
+
+Integrator Hierarchy:
+    - O(h¹): Euler (pedagogical only, not symplectic)
+    - O(h²): Störmer-Verlet (symplectic)
+    - O(h⁴): RK4 (accurate, not symplectic)
+    - O(h⁴): Yoshida (accurate AND symplectic)
+
+Usage:
+    # For arbitrary dynamics (e.g., Lagrangian systems)
+    integrator = make_rk4_integrator(dynamics_fn)
+    traj = integrator(state_0, n_steps, dt, params)
+
+    # For separable Hamiltonians H = T(p) + V(q)
+    integrator = make_verlet_integrator(grad_V_fn, n_dof)
+    traj = integrator(state_0, n_steps, dt, params, mass_matrix)
+
+    # For separable Hamiltonians, 4th-order accurate
+    integrator = make_yoshida4_integrator(grad_V_fn, n_dof)
+    traj = integrator(state_0, n_steps, dt, params, mass_matrix)
 """
 
 from functools import partial
@@ -13,22 +32,36 @@ from jax import jit
 from jax.lax import scan
 
 
-# ---------------------------------------------------------------------
-# Single-step methods
-# ---------------------------------------------------------------------
+# =============================================================================
+# Constants
+# =============================================================================
+
+# Yoshida 4th-order coefficients
+# Solve: w₀ + 2w₁ = 1 (consistency) and w₀³ + 2w₁³ = 0 (4th order)
+_CBRT2 = 2.0 ** (1 / 3)
+_YOSHIDA_W1 = 1.0 / (2.0 - _CBRT2)  # ≈  1.3512
+_YOSHIDA_W0 = -_CBRT2 * _YOSHIDA_W1  # ≈ -1.7024
+
+
+# =============================================================================
+# Single-Step Methods
+# =============================================================================
 
 
 def euler_step(state, params, dynamics, dt):
     """
-    Forward Euler: simplest integrator, O(h) accuracy.
+    Forward Euler step. O(h) accuracy.
+
     Systematically adds energy to Hamiltonian systems.
+    For pedagogy only—do not use in production.
     """
     return state + dt * dynamics(state, params)
 
 
 def rk4_step(state, params, dynamics, dt):
     """
-    Classic 4th-order Runge-Kutta: O(h^4) accuracy.
+    Classic 4th-order Runge-Kutta step. O(h⁴) accuracy.
+
     Excellent accuracy but not symplectic—energy drifts over long times.
     """
     k1 = dynamics(state, params)
@@ -40,21 +73,20 @@ def rk4_step(state, params, dynamics, dt):
 
 def verlet_step(q, p, params, grad_V, mass_matrix, dt):
     """
-    Störmer-Verlet for separable Hamiltonian H = T(p) + V(q).
-
-    Symplectic: preserves phase space volume, bounded energy error.
+    Störmer-Verlet step for separable Hamiltonian H = T(p) + V(q).
+    O(h²) accuracy, symplectic.
 
     The leapfrog structure:
-        1. Half kick: p moves under V for dt/2
-        2. Full drift: q moves under T for dt
-        3. Half kick: p moves under V for dt/2
+        1. Half kick: p ← p - (dt/2)·∇V(q)
+        2. Full drift: q ← q + dt·(p/m)
+        3. Half kick: p ← p - (dt/2)·∇V(q)
 
     Args:
-        q: position array
-        p: momentum array
-        params: dict of physical parameters
-        grad_V: function (q, params) -> ∇V(q)
-        mass_matrix: array of masses (diagonal mass matrix)
+        q: positions (n_dof,)
+        p: momenta (n_dof,) — NOTE: momenta, not velocities
+        params: physical parameters dict
+        grad_V: function (q, params) → ∇V(q)
+        mass_matrix: diagonal masses (n_dof,)
         dt: timestep
 
     Returns:
@@ -63,7 +95,7 @@ def verlet_step(q, p, params, grad_V, mass_matrix, dt):
     # Half kick
     p_half = p - 0.5 * dt * grad_V(q, params)
 
-    # Full drift (assuming T = Σ p²/2m)
+    # Full drift
     q_new = q + dt * p_half / mass_matrix
 
     # Half kick
@@ -72,157 +104,199 @@ def verlet_step(q, p, params, grad_V, mass_matrix, dt):
     return q_new, p_new
 
 
-def verlet_step_scalar(state, params, grad_V, m, dt):
+def yoshida_step(q, p, params, grad_V, mass_matrix, dt):
     """
-    Störmer-Verlet for single degree of freedom with scalar mass.
+    4th-order Yoshida step. O(h⁴) accuracy, symplectic.
 
-    state = [q, p]
+    Composes three Verlet steps with coefficients that cancel O(h³) error.
 
-    Convenience wrapper for the common 1D case.
+    Reference:
+        Yoshida, H. (1990). "Construction of higher order symplectic integrators."
+        Physics Letters A, 150(5-7), 262-268.
+
+    Args:
+        q: positions (n_dof,)
+        p: momenta (n_dof,)
+        params: physical parameters dict
+        grad_V: function (q, params) → ∇V(q)
+        mass_matrix: diagonal masses (n_dof,)
+        dt: timestep
+
+    Returns:
+        (q_new, p_new)
     """
-    q, p = state[0], state[1]
-
-    # Half kick
-    p_half = p - 0.5 * dt * grad_V(jnp.array([q]), params)[0]
-
-    # Full drift
-    q_new = q + dt * p_half / m
-
-    # Half kick
-    p_new = p_half - 0.5 * dt * grad_V(jnp.array([q_new]), params)[0]
-
-    return jnp.array([q_new, p_new])
+    q, p = verlet_step(q, p, params, grad_V, mass_matrix, _YOSHIDA_W1 * dt)
+    q, p = verlet_step(q, p, params, grad_V, mass_matrix, _YOSHIDA_W0 * dt)
+    q, p = verlet_step(q, p, params, grad_V, mass_matrix, _YOSHIDA_W1 * dt)
+    return q, p
 
 
-# ---------------------------------------------------------------------
-# Trajectory integration via scan
-# ---------------------------------------------------------------------
+# =============================================================================
+# Factory Functions: General Dynamics
+# =============================================================================
+
+
+def make_rk4_integrator(dynamics):
+    """
+    Create RK4 integrator bound to a dynamics function.
+
+    O(h⁴) accuracy, not symplectic.
+
+    Args:
+        dynamics: function (state, params) → d_state/dt
+
+    Returns:
+        integrate(state_0, n_steps, dt, params) → trajectory
+    """
+
+    @partial(jit, static_argnums=(1,))
+    def integrate(state_0, n_steps, dt, params):
+        def step_fn(state, _):
+            new_state = rk4_step(state, params, dynamics, dt)
+            return new_state, new_state
+
+        _, trajectory = scan(step_fn, state_0, None, length=n_steps)
+        return trajectory
+
+    return integrate
+
+
+# =============================================================================
+# Factory Functions: Symplectic (Separable Hamiltonians)
+# =============================================================================
+
+
+def make_verlet_integrator(grad_V, n_dof):
+    """
+    Create Störmer-Verlet integrator bound to a grad_V function.
+
+    O(h²) accuracy, symplectic.
+
+    For separable Hamiltonians H = T(p) + V(q) where T = Σᵢ pᵢ²/(2mᵢ).
+
+    Args:
+        grad_V: function (q, params) → ∇V(q)
+        n_dof: degrees of freedom
+
+    Returns:
+        integrate(state_0, n_steps, dt, params, mass_matrix) → trajectory
+
+    Note:
+        Input state = [q, v] uses velocities.
+        Internally converts to momenta p = m·v for symplectic integration.
+    """
+
+    @partial(jit, static_argnums=(1,))
+    def integrate(state_0, n_steps, dt, params, mass_matrix):
+        # Unpack state: [q, v] with velocities
+        q = state_0[:n_dof]
+        v = state_0[n_dof:]
+
+        # Convert velocity → momentum for symplectic integration
+        p = v * mass_matrix
+
+        def step_fn(carry, _):
+            q, p = carry
+            q_new, p_new = verlet_step(q, p, params, grad_V, mass_matrix, dt)
+
+            # Convert momentum → velocity for output
+            v_new = p_new / mass_matrix
+            state = jnp.concatenate([q_new, v_new])
+
+            return (q_new, p_new), state
+
+        _, trajectory = scan(step_fn, (q, p), None, length=n_steps)
+        return trajectory
+
+    return integrate
+
+
+def make_yoshida4_integrator(grad_V, n_dof):
+    """
+    Create 4th-order Yoshida integrator bound to a grad_V function.
+
+    O(h⁴) accuracy, symplectic.
+
+    Same accuracy as RK4, but preserves symplectic structure.
+    Composes three Verlet steps with coefficients that cancel O(h³) error.
+
+    Args:
+        grad_V: function (q, params) → ∇V(q)
+        n_dof: degrees of freedom
+
+    Returns:
+        integrate(state_0, n_steps, dt, params, mass_matrix) → trajectory
+
+    Note:
+        Input state = [q, v] uses velocities.
+        Internally converts to momenta p = m·v for symplectic integration.
+    """
+
+    @partial(jit, static_argnums=(1,))
+    def integrate(state_0, n_steps, dt, params, mass_matrix):
+        # Unpack state: [q, v] with velocities
+        q = state_0[:n_dof]
+        v = state_0[n_dof:]
+
+        # Convert velocity → momentum for symplectic integration
+        p = v * mass_matrix
+
+        def step_fn(carry, _):
+            q, p = carry
+            q_new, p_new = yoshida_step(q, p, params, grad_V, mass_matrix, dt)
+
+            # Convert momentum → velocity for output
+            v_new = p_new / mass_matrix
+            state = jnp.concatenate([q_new, v_new])
+
+            return (q_new, p_new), state
+
+        _, trajectory = scan(step_fn, (q, p), None, length=n_steps)
+        return trajectory
+
+    return integrate
+
+
+# =============================================================================
+# Standalone Integration Functions (for direct use without factory)
+# =============================================================================
 
 
 @partial(jit, static_argnums=(1, 4))
 def integrate_rk4(state_0, n_steps, dt, params, dynamics):
     """
-    Integrate using RK4 for n_steps.
+    Integrate using RK4.
 
     Args:
-        state_0: initial state array
-        n_steps: number of integration steps (static)
+        state_0: initial state
+        n_steps: number of steps (static)
         dt: timestep
-        params: dict of parameters
-        dynamics: function (state, params) -> d_state/dt (static)
+        params: parameter dict
+        dynamics: function (state, params) → d_state/dt (static)
 
     Returns:
-        trajectory: array of shape (n_steps, state_dim)
+        trajectory of shape (n_steps, state_dim)
     """
 
-    def step_fn(carry, _):
-        state, t = carry
+    def step_fn(state, _):
         new_state = rk4_step(state, params, dynamics, dt)
-        return (new_state, t + dt), new_state
+        return new_state, new_state
 
-    _, trajectory = scan(step_fn, (state_0, 0.0), None, length=n_steps)
+    _, trajectory = scan(step_fn, state_0, None, length=n_steps)
     return trajectory
 
 
 @partial(jit, static_argnums=(1, 4))
 def integrate_euler(state_0, n_steps, dt, params, dynamics):
     """
-    Integrate using forward Euler for n_steps.
+    Integrate using forward Euler.
 
-    Not recommended for production—use for pedagogy only.
+    For pedagogy only—use RK4 or symplectic methods in practice.
     """
 
-    def step_fn(carry, _):
-        state, t = carry
+    def step_fn(state, _):
         new_state = euler_step(state, params, dynamics, dt)
-        return (new_state, t + dt), new_state
+        return new_state, new_state
 
-    _, trajectory = scan(step_fn, (state_0, 0.0), None, length=n_steps)
+    _, trajectory = scan(step_fn, state_0, None, length=n_steps)
     return trajectory
-
-
-@partial(jit, static_argnums=(1, 5))
-def integrate_verlet(state_0, n_steps, dt, params, mass_matrix, grad_V):
-    """
-    Integrate using Störmer-Verlet for n_steps.
-
-    Symplectic integrator for separable Hamiltonians.
-
-    Args:
-        state_0: initial state [q1, ..., qn, p1, ..., pn]
-        n_steps: number of integration steps (static)
-        dt: timestep
-        params: dict of parameters
-        mass_matrix: array of masses
-        grad_V: function (q, params) -> ∇V(q) (static)
-
-    Returns:
-        trajectory: array of shape (n_steps, state_dim)
-    """
-    n_dof = len(state_0) // 2
-    q_0 = state_0[:n_dof]
-    p_0 = state_0[n_dof:]
-
-    def step_fn(carry, _):
-        q, p, t = carry
-        q_new, p_new = verlet_step(q, p, params, grad_V, mass_matrix, dt)
-        state_new = jnp.concatenate([q_new, p_new])
-        return (q_new, p_new, t + dt), state_new
-
-    _, trajectory = scan(step_fn, (q_0, p_0, 0.0), None, length=n_steps)
-    return trajectory
-
-
-# ---------------------------------------------------------------------
-# Factory functions for integrators
-# ---------------------------------------------------------------------
-
-
-def make_rk4_integrator(dynamics):
-    """
-    Create an RK4 integrator bound to a specific dynamics function.
-
-    Returns:
-        integrate(state_0, n_steps, dt, params) -> trajectory
-    """
-
-    @partial(jit, static_argnums=(1,))
-    def integrate(state_0, n_steps, dt, params):
-        def step_fn(carry, _):
-            state, t = carry
-            new_state = rk4_step(state, params, dynamics, dt)
-            return (new_state, t + dt), new_state
-
-        _, trajectory = scan(step_fn, (state_0, 0.0), None, length=n_steps)
-        return trajectory
-
-    return integrate
-
-
-def make_verlet_integrator(grad_V, n_dof):
-    """
-    Create a Verlet integrator bound to a specific grad_V function.
-
-    Args:
-        grad_V: function (q, params) -> ∇V(q)
-        n_dof: number of degrees of freedom
-
-    Returns:
-        integrate(state_0, n_steps, dt, params, mass_matrix) -> trajectory
-    """
-
-    @partial(jit, static_argnums=(1,))
-    def integrate(state_0, n_steps, dt, params, mass_matrix):
-        q_0 = state_0[:n_dof]
-        p_0 = state_0[n_dof:]
-
-        def step_fn(carry, _):
-            q, p, t = carry
-            q_new, p_new = verlet_step(q, p, params, grad_V, mass_matrix, dt)
-            state_new = jnp.concatenate([q_new, p_new])
-            return (q_new, p_new, t + dt), state_new
-
-        _, trajectory = scan(step_fn, (q_0, p_0, 0.0), None, length=n_steps)
-        return trajectory
-
-    return integrate

@@ -21,6 +21,7 @@ from .codegen import (
 from .integrators import (
     make_rk4_integrator,
     make_verlet_integrator,
+    make_yoshida4_integrator,
 )
 
 import jax.numpy as jnp
@@ -183,6 +184,7 @@ class LagrangianSystem:
     # Integration
     # -------------------------------------------------------------------------
 
+
     def integrate(self, state_0, n_steps, dt, params, method="auto", mass_matrix=None):
         """
         Integrate the system forward in time.
@@ -192,31 +194,32 @@ class LagrangianSystem:
             n_steps: number of integration steps
             dt: timestep
             params: dict of parameter values
-            method: 'auto', 'verlet', or 'rk4'
-                - 'auto': Verlet if separable, else RK4
-                - 'verlet': Störmer-Verlet (requires separable system)
+            method: 'auto', 'yoshida', 'verlet', or 'rk4'
+                - 'auto': Yoshida if separable, else RK4
+                - 'yoshida': 4th-order symplectic (requires separable)
+                - 'verlet': 2nd-order symplectic (requires separable)
                 - 'rk4': 4th-order Runge-Kutta
-            mass_matrix: array of masses (required for Verlet, inferred if possible)
+            mass_matrix: array of masses (required for symplectic, inferred if possible)
 
         Returns:
             trajectory array of shape (n_steps, 2*n_dof)
         """
         # Resolve method
         if method == "auto":
-            method = "verlet" if self._is_separable else "rk4"
+            method = "yoshida" if self._is_separable else "rk4"
 
         # Validate method choice
-        if method == "verlet" and not self._is_separable:
+        if method in ("verlet", "yoshida") and not self._is_separable:
             raise ValueError(
-                "Verlet integration requires separable Hamiltonian H = T(p) + V(q). "
-                "This system is not separable. Use method='rk4' instead."
+                f"{method.capitalize()} integration requires separable Hamiltonian "
+                "H = T(p) + V(q). This system is not separable. Use method='rk4' instead."
             )
 
         # Get or create integrator
         integrator = self._get_integrator(method)
 
         # Call appropriate integrator
-        if method == "verlet":
+        if method in ("verlet", "yoshida"):
             if mass_matrix is None:
                 mass_matrix = self._infer_mass_matrix(params)
             return integrator(state_0, n_steps, dt, params, mass_matrix)
@@ -228,6 +231,10 @@ class LagrangianSystem:
         if method not in self._integrators:
             if method == "verlet":
                 self._integrators[method] = make_verlet_integrator(
+                    self._grad_V_fn, self.n_dof
+                )
+            elif method == "yoshida":
+                self._integrators[method] = make_yoshida4_integrator(
                     self._grad_V_fn, self.n_dof
                 )
             elif method == "rk4":
@@ -397,30 +404,20 @@ class LagrangianSystem:
     ):
         """
         Compare integration methods on conservation and accuracy.
-
-        Args:
-            state_0: initial state
-            n_steps: number of steps
-            dt: timestep
-            params: parameter dict
-            methods: list of methods to compare (default: auto based on separability)
-            quantities: dict of {name: expr} for additional conserved quantities
-            save_as: filename prefix to save plots (None = don't save)
-            show: whether to display plots
-
-        Returns:
-            dict of {method: trajectory}
+        ...
         """
         from .plotting import plot_energy_comparison, plot_configuration_space
 
-        # Default methods
+        # Default methods: fair comparison at same order
         if methods is None:
-            methods = ["rk4", "verlet"] if self.is_separable else ["rk4"]
+            methods = ["rk4", "yoshida"] if self.is_separable else ["rk4"]
 
-        # Filter verlet if not separable
-        if not self.is_separable and "verlet" in methods:
-            print("Note: Verlet unavailable (system not separable)")
-            methods = [m for m in methods if m != "verlet"]
+        # Filter symplectic methods if not separable
+        if not self.is_separable:
+            symplectic = {"verlet", "yoshida"}
+            if symplectic & set(methods):
+                print(f"Note: Symplectic methods removed (system not separable)")
+                methods = [m for m in methods if m not in symplectic]
 
         # Integrate with each method
         trajectories = {}
