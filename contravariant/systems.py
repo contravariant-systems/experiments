@@ -455,14 +455,18 @@ class LagrangianSystem:
 
         # Plot configuration/phase space
         best_method = "yoshida" if "yoshida" in trajectories else methods[0]
-        is_phase_space = (self.n_dof == 1)
+        is_phase_space = self.n_dof == 1
         plot_configuration_space(
             trajectories[best_method],
             coord_indices=(0, 1),
             xlabel=str(self.q_vars[0]),
             ylabel=str(self.q_dot_vars[0]) if is_phase_space else str(self.q_vars[1]),
             title="Phase Space" if is_phase_space else "Configuration Space",
-            save_as=f"{save_as}_{'phase' if is_phase_space else 'config'}" if save_as else None,
+            save_as=(
+                f"{save_as}_{'phase' if is_phase_space else 'config'}"
+                if save_as
+                else None
+            ),
             show=show,
         )
 

@@ -17,6 +17,12 @@ from .pendulums import (
     spherical_pendulum,
 )
 
+from .particles import (
+    free_particle_2d,
+    central_force,
+    kepler,
+)
+
 __all__ = [
     # Oscillators
     "harmonic_oscillator",
@@ -27,4 +33,8 @@ __all__ = [
     "simple_pendulum",
     "double_pendulum",
     "spherical_pendulum",
+    # Particles
+    "free_particle_2d",
+    "central_force",
+    "kepler",
 ]
