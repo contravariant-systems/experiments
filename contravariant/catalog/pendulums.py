@@ -6,23 +6,38 @@ from sympy import symbols, Rational, cos, sin
 from ..systems import LagrangianSystem
 
 
-def simple_pendulum():
+def simple_pendulum(coord="theta", mass="m", length="l", gravity="g"):
     """
-    Simple pendulum.
+    Simple pendulum with configurable symbols.
 
     L = ½ml²θ̇² - mgl(1 - cosθ)
 
     Separable: yes (T depends only on θ̇, V depends only on θ).
 
-    Parameters: m (mass), l (length), g (gravity)
+    Args:
+        coord: coordinate name (default 'theta')
+        mass: mass parameter name (default 'm')
+        length: length parameter name (default 'l')
+        gravity: gravity parameter name (default 'g')
 
     Returns:
         LagrangianSystem
-    """
-    theta, theta_dot = symbols("theta theta_dot")
-    m, l, g = symbols("m l g", positive=True)
 
-    L = Rational(1, 2) * m * l**2 * theta_dot**2 - m * g * l * (1 - cos(theta))
+    Example:
+        >>> sys = simple_pendulum()
+        >>> sys1 = simple_pendulum(coord='theta1')
+        >>> sys2 = simple_pendulum(coord='theta2')
+        >>> sys_two = sys1 + sys2  # two non-interacting pendulums
+    """
+    theta = symbols(coord)
+    theta_dot = symbols(f"{coord}_dot")
+    m_sym = symbols(mass, positive=True)
+    l_sym = symbols(length, positive=True)
+    g_sym = symbols(gravity, positive=True)
+
+    L = Rational(1, 2) * m_sym * l_sym**2 * theta_dot**2 - m_sym * g_sym * l_sym * (
+        1 - cos(theta)
+    )
 
     return LagrangianSystem(L, [theta], [theta_dot])
 
