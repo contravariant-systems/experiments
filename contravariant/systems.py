@@ -353,38 +353,55 @@ class LagrangianSystem:
         )
 
     # -------------------------------------------------------------------------
-    # Composition
+    # Composition and Lagrangian Arithmetic
     # -------------------------------------------------------------------------
 
     def __add__(self, other):
         """
-        Compose two non-interacting systems.
-
-        L_total = L_self + L_other
-
-        Coordinates are concatenated. Parameters with the same name
-        become shared (e.g., both having 'm' means same mass). This is
-        standard sympy behavior.
+        Add another system (composition) or a sympy expression.
 
         Args:
-            other: another LagrangianSystem
+            other: LagrangianSystem or sympy expression
 
         Returns:
-            New LagrangianSystem with combined Lagrangian
+            New LagrangianSystem
 
         Example:
-            >>> sys_x = harmonic_oscillator(coord='x')
-            >>> sys_y = harmonic_oscillator(coord='y')
-            >>> sys_2d = sys_x + sys_y  # 2D isotropic oscillator
+            >>> sys_2d = sys_x + sys_y  # composition
+            >>> sys = sys + T_extra     # add kinetic term
         """
-        if not isinstance(other, LagrangianSystem):
-            return NotImplemented
+        if isinstance(other, LagrangianSystem):
+            L_combined = self.L + other.L
+            q_combined = list(self.q_vars) + list(other.q_vars)
+            q_dot_combined = list(self.q_dot_vars) + list(other.q_dot_vars)
+            return LagrangianSystem(L_combined, q_combined, q_dot_combined)
+        else:
+            return LagrangianSystem(
+                self.L + other, list(self.q_vars), list(self.q_dot_vars)
+            )
 
-        L_combined = self.L + other.L
-        q_combined = list(self.q_vars) + list(other.q_vars)
-        q_dot_combined = list(self.q_dot_vars) + list(other.q_dot_vars)
+    def __sub__(self, other):
+        """
+        Subtract a sympy expression or another system from the Lagrangian.
 
-        return LagrangianSystem(L_combined, q_combined, q_dot_combined)
+        Args:
+            other: sympy expression or LagrangianSystem
+
+        Returns:
+            New LagrangianSystem
+
+        Example:
+            >>> sys = sys_x + sys_y - Rational(1,2) * k_c * (x - y)**2
+        """
+        if isinstance(other, LagrangianSystem):
+            L_combined = self.L - other.L
+            q_combined = list(self.q_vars) + list(other.q_vars)
+            q_dot_combined = list(self.q_dot_vars) + list(other.q_dot_vars)
+            return LagrangianSystem(L_combined, q_combined, q_dot_combined)
+        else:
+            return LagrangianSystem(
+                self.L - other, list(self.q_vars), list(self.q_dot_vars)
+            )
 
     # -------------------------------------------------------------------------
     # Comparison and Visualization
