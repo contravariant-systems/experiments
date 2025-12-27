@@ -23,6 +23,10 @@ from .particles import (
     kepler,
 )
 
+from .fput import (
+    fput_chain,
+)
+
 __all__ = [
     # Oscillators
     "harmonic_oscillator",
@@ -37,4 +41,6 @@ __all__ = [
     "free_particle_2d",
     "central_force",
     "kepler",
+    # FPUT,
+    "fput_chain",
 ]
