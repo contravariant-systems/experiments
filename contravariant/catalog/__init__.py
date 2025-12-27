@@ -18,6 +18,7 @@ from .pendulums import (
 )
 
 from .particles import (
+    free_particle,
     free_particle_2d,
     central_force,
     kepler,
@@ -38,9 +39,10 @@ __all__ = [
     "double_pendulum",
     "spherical_pendulum",
     # Particles
+    "free_particle",
     "free_particle_2d",
     "central_force",
     "kepler",
-    # FPUT,
+    # FPUT
     "fput_chain",
 ]

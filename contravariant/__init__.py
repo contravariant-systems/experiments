@@ -40,10 +40,11 @@ from .plotting import (
     plot_trajectory,
     plot_positions,
     plot_phase_space,
+    plot_phase_space_multi,
     plot_energy_evolution,
     plot_energy_error,
-    compare_energy_errors,
-    plot_phase_space_multi,
+    plot_energy_errors,
+    plot_configuration_space,
 )
 
 __version__ = "0.1.0"
