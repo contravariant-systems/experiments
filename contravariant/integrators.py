@@ -22,7 +22,7 @@ Usage:
     traj = integrator(state_0, n_steps, dt, params, mass_matrix)
 
     # For separable Hamiltonians, 4th-order accurate
-    integrator = make_yoshida4_integrator(grad_V_fn, n_dof)
+    integrator = make_yoshida_integrator(grad_V_fn, n_dof)
     traj = integrator(state_0, n_steps, dt, params, mass_matrix)
 """
 
@@ -211,7 +211,7 @@ def make_verlet_integrator(grad_V, n_dof):
     return integrate
 
 
-def make_yoshida4_integrator(grad_V, n_dof):
+def make_yoshida_integrator(grad_V, n_dof):
     """
     Create 4th-order Yoshida integrator bound to a grad_V function.
 

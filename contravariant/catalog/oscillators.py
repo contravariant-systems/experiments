@@ -8,7 +8,7 @@ from ..systems import LagrangianSystem
 
 def harmonic_oscillator(coord="q", mass="m", spring="k"):
     """
-    Simple harmonic oscillator with configurable symbols.
+    Simple harmonic oscillator.
 
     L = ½m q̇² - ½k q²
 
@@ -17,12 +17,8 @@ def harmonic_oscillator(coord="q", mass="m", spring="k"):
         mass: mass parameter name (default 'm')
         spring: spring constant name (default 'k')
 
-    Returns:
-        LagrangianSystem
-
     Example:
         >>> sys = harmonic_oscillator()
-        >>> sys_x = harmonic_oscillator(coord='x')
         >>> sys_2d = harmonic_oscillator(coord='x') + harmonic_oscillator(coord='y')
     """
     q = symbols(coord)
@@ -31,73 +27,89 @@ def harmonic_oscillator(coord="q", mass="m", spring="k"):
     k_sym = symbols(spring, positive=True)
 
     L = Rational(1, 2) * m_sym * q_dot**2 - Rational(1, 2) * k_sym * q**2
-
     return LagrangianSystem(L, [q], [q_dot])
 
 
-def harmonic_oscillator_2d():
+def harmonic_oscillator_2d(coords=("q1", "q2"), mass="m", spring="k"):
     """
     2D isotropic harmonic oscillator.
 
-    L = ½m(ẋ² + ẏ²) - ½k(x² + y²)
+    L = ½m(q̇₁² + q̇₂²) - ½k(q₁² + q₂²)
 
-    Has rotation symmetry → conserves angular momentum L_z = m(xẏ - ẋy).
+    Has rotation symmetry → conserves angular momentum.
 
-    Parameters: m (mass), k (spring constant)
-
-    Returns:
-        LagrangianSystem
+    Args:
+        coords: coordinate names (default ('q1', 'q2'))
+        mass: mass parameter name (default 'm')
+        spring: spring constant name (default 'k')
     """
-    x, x_dot, y, y_dot = symbols("x x_dot y y_dot")
-    m, k = symbols("m k", positive=True)
-
-    L = Rational(1, 2) * m * (x_dot**2 + y_dot**2) - Rational(1, 2) * k * (x**2 + y**2)
-
-    return LagrangianSystem(L, [x, y], [x_dot, y_dot])
+    c1, c2 = coords
+    return harmonic_oscillator(
+        coord=c1, mass=mass, spring=spring
+    ) + harmonic_oscillator(coord=c2, mass=mass, spring=spring)
 
 
-def coupled_oscillators():
+def coupled_oscillators(coords=("q1", "q2"), mass="m", spring="k", coupling="k_c"):
     """
     Two coupled harmonic oscillators.
 
     L = ½m(q̇₁² + q̇₂²) - ½k(q₁² + q₂²) - ½kc(q₂ - q₁)²
 
-    Two masses connected by springs, with a coupling spring between them.
+    Two masses connected to walls by springs, with a coupling spring between them.
 
-    Parameters: m (mass), k (spring constant), k_c (coupling constant)
+    Args:
+        coords: coordinate names (default ('q1', 'q2'))
+        mass: mass parameter name (default 'm')
+        spring: wall spring constant name (default 'k')
+        coupling: coupling spring constant name (default 'k_c')
 
-    Returns:
-        LagrangianSystem
+    Example:
+        >>> sys = coupled_oscillators()
+        >>> sys_ab = coupled_oscillators(coords=('a', 'b'), coupling='J')
     """
-    q1, q1_dot, q2, q2_dot = symbols("q1 q1_dot q2 q2_dot")
-    m, k, k_c = symbols("m k k_c", positive=True)
+    c1, c2 = coords
+    q1, q2 = symbols(c1), symbols(c2)
+    q1_dot, q2_dot = symbols(f"{c1}_dot"), symbols(f"{c2}_dot")
+    m_sym = symbols(mass, positive=True)
+    k_sym = symbols(spring, positive=True)
+    k_c_sym = symbols(coupling, positive=True)
 
     L = (
-        Rational(1, 2) * m * (q1_dot**2 + q2_dot**2)
-        - Rational(1, 2) * k * (q1**2 + q2**2)
-        - Rational(1, 2) * k_c * (q2 - q1) ** 2
+        Rational(1, 2) * m_sym * (q1_dot**2 + q2_dot**2)
+        - Rational(1, 2) * k_sym * (q1**2 + q2**2)
+        - Rational(1, 2) * k_c_sym * (q2 - q1) ** 2
     )
-
     return LagrangianSystem(L, [q1, q2], [q1_dot, q2_dot])
 
 
-def anharmonic_oscillator(order=4):
+def anharmonic_oscillator(
+    coord="q", mass="m", spring="k", anharmonic="lambda", order=4
+):
     """
     Anharmonic oscillator with polynomial potential.
 
     L = ½mq̇² - ½kq² - λqⁿ
 
-    Parameters: m (mass), k (spring constant), lam (anharmonic coefficient)
-
     Args:
+        coord: coordinate name (default 'q')
+        mass: mass parameter name (default 'm')
+        spring: spring constant name (default 'k')
+        anharmonic: anharmonic coefficient name (default 'lambda')
         order: power of anharmonic term (default 4, i.e., quartic)
 
-    Returns:
-        LagrangianSystem
+    Example:
+        >>> sys = anharmonic_oscillator()
+        >>> sys_cubic = anharmonic_oscillator(anharmonic='alpha', order=3)
     """
-    q, q_dot = symbols("q q_dot")
-    m, k, lam = symbols("m k lambda", positive=True)
+    q = symbols(coord)
+    q_dot = symbols(f"{coord}_dot")
+    m_sym = symbols(mass, positive=True)
+    k_sym = symbols(spring, positive=True)
+    lam_sym = symbols(anharmonic, positive=True)
 
-    L = Rational(1, 2) * m * q_dot**2 - Rational(1, 2) * k * q**2 - lam * q**order
-
+    L = (
+        Rational(1, 2) * m_sym * q_dot**2
+        - Rational(1, 2) * k_sym * q**2
+        - lam_sym * q**order
+    )
     return LagrangianSystem(L, [q], [q_dot])

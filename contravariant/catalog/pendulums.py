@@ -8,7 +8,7 @@ from ..systems import LagrangianSystem
 
 def simple_pendulum(coord="theta", mass="m", length="l", gravity="g"):
     """
-    Simple pendulum with configurable symbols.
+    Simple pendulum.
 
     L = ½ml²θ̇² - mgl(1 - cosθ)
 
@@ -20,14 +20,9 @@ def simple_pendulum(coord="theta", mass="m", length="l", gravity="g"):
         length: length parameter name (default 'l')
         gravity: gravity parameter name (default 'g')
 
-    Returns:
-        LagrangianSystem
-
     Example:
         >>> sys = simple_pendulum()
-        >>> sys1 = simple_pendulum(coord='theta1')
-        >>> sys2 = simple_pendulum(coord='theta2')
-        >>> sys_two = sys1 + sys2  # two non-interacting pendulums
+        >>> sys_double = simple_pendulum(coord='theta1') + simple_pendulum(coord='theta2')
     """
     theta = symbols(coord)
     theta_dot = symbols(f"{coord}_dot")
@@ -38,11 +33,12 @@ def simple_pendulum(coord="theta", mass="m", length="l", gravity="g"):
     L = Rational(1, 2) * m_sym * l_sym**2 * theta_dot**2 - m_sym * g_sym * l_sym * (
         1 - cos(theta)
     )
-
     return LagrangianSystem(L, [theta], [theta_dot])
 
 
-def double_pendulum():
+def double_pendulum(
+    coords=("theta1", "theta2"), masses=("m1", "m2"), lengths=("l1", "l2"), gravity="g"
+):
     """
     Double pendulum.
 
@@ -51,27 +47,38 @@ def double_pendulum():
     NOT separable: T contains cos(θ₁ - θ₂) coupling positions and velocities.
     System will auto-select RK4.
 
-    Parameters: m1, m2 (masses), l1, l2 (lengths), g (gravity)
+    Args:
+        coords: coordinate names (default ('theta1', 'theta2'))
+        masses: mass parameter names (default ('m1', 'm2'))
+        lengths: length parameter names (default ('l1', 'l2'))
+        gravity: gravity parameter name (default 'g')
 
-    Returns:
-        LagrangianSystem
+    Example:
+        >>> sys = double_pendulum()
+        >>> sys_ab = double_pendulum(coords=('a', 'b'))
     """
-    theta1, theta1_dot = symbols("theta1 theta1_dot")
-    theta2, theta2_dot = symbols("theta2 theta2_dot")
-    m1, m2, l1, l2, g = symbols("m1 m2 l1 l2 g", positive=True)
+    c1, c2 = coords
+    theta1, theta2 = symbols(c1), symbols(c2)
+    theta1_dot, theta2_dot = symbols(f"{c1}_dot"), symbols(f"{c2}_dot")
+    m1_sym, m2_sym = symbols(masses[0], positive=True), symbols(
+        masses[1], positive=True
+    )
+    l1_sym, l2_sym = symbols(lengths[0], positive=True), symbols(
+        lengths[1], positive=True
+    )
+    g_sym = symbols(gravity, positive=True)
 
     L = (
-        Rational(1, 2) * (m1 + m2) * l1**2 * theta1_dot**2
-        + Rational(1, 2) * m2 * l2**2 * theta2_dot**2
-        + m2 * l1 * l2 * theta1_dot * theta2_dot * cos(theta1 - theta2)
-        - (m1 + m2) * g * l1 * (1 - cos(theta1))
-        - m2 * g * l2 * (1 - cos(theta2))
+        Rational(1, 2) * (m1_sym + m2_sym) * l1_sym**2 * theta1_dot**2
+        + Rational(1, 2) * m2_sym * l2_sym**2 * theta2_dot**2
+        + m2_sym * l1_sym * l2_sym * theta1_dot * theta2_dot * cos(theta1 - theta2)
+        - (m1_sym + m2_sym) * g_sym * l1_sym * (1 - cos(theta1))
+        - m2_sym * g_sym * l2_sym * (1 - cos(theta2))
     )
-
     return LagrangianSystem(L, [theta1, theta2], [theta1_dot, theta2_dot])
 
 
-def spherical_pendulum():
+def spherical_pendulum(coords=("theta", "phi"), mass="m", length="l", gravity="g"):
     """
     Spherical pendulum (pendulum free to swing in 3D).
 
@@ -80,17 +87,24 @@ def spherical_pendulum():
     φ is cyclic → angular momentum about vertical axis is conserved.
     NOT separable: T contains sin²θ coupling position and velocity.
 
-    Parameters: m (mass), l (length), g (gravity)
+    Args:
+        coords: coordinate names (default ('theta', 'phi'))
+        mass: mass parameter name (default 'm')
+        length: length parameter name (default 'l')
+        gravity: gravity parameter name (default 'g')
 
-    Returns:
-        LagrangianSystem
+    Example:
+        >>> sys = spherical_pendulum()
+        >>> sys_alt = spherical_pendulum(coords=('polar', 'azimuth'))
     """
-    theta, theta_dot = symbols("theta theta_dot")
-    phi, phi_dot = symbols("phi phi_dot")
-    m, l, g = symbols("m l g", positive=True)
+    c1, c2 = coords
+    theta, phi = symbols(c1), symbols(c2)
+    theta_dot, phi_dot = symbols(f"{c1}_dot"), symbols(f"{c2}_dot")
+    m_sym = symbols(mass, positive=True)
+    l_sym = symbols(length, positive=True)
+    g_sym = symbols(gravity, positive=True)
 
-    L = Rational(1, 2) * m * l**2 * (
+    L = Rational(1, 2) * m_sym * l_sym**2 * (
         theta_dot**2 + sin(theta) ** 2 * phi_dot**2
-    ) - m * g * l * (1 - cos(theta))
-
+    ) - m_sym * g_sym * l_sym * (1 - cos(theta))
     return LagrangianSystem(L, [theta, phi], [theta_dot, phi_dot])

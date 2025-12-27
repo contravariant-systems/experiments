@@ -27,7 +27,7 @@ from .codegen import (
 from .integrators import (
     make_rk4_integrator,
     make_verlet_integrator,
-    make_yoshida4_integrator,
+    make_yoshida_integrator,
 )
 
 from .learning import (
@@ -43,7 +43,7 @@ from .plotting import (
     plot_energy_evolution,
     plot_energy_error,
     compare_energy_errors,
-    plot_phase_space_cloud,
+    plot_phase_space_multi,
 )
 
 __version__ = "0.1.0"

@@ -21,7 +21,7 @@ from .codegen import (
 from .integrators import (
     make_rk4_integrator,
     make_verlet_integrator,
-    make_yoshida4_integrator,
+    make_yoshida_integrator,
 )
 
 import jax.numpy as jnp
@@ -233,7 +233,7 @@ class LagrangianSystem:
                     self._grad_V_fn, self.n_dof
                 )
             elif method == "yoshida":
-                self._integrators[method] = make_yoshida4_integrator(
+                self._integrators[method] = make_yoshida_integrator(
                     self._grad_V_fn, self.n_dof
                 )
             elif method == "rk4":
@@ -435,7 +435,7 @@ class LagrangianSystem:
         Compare integration methods on conservation and accuracy.
         ...
         """
-        from .plotting import plot_energy_comparison, plot_configuration_space
+        from .plotting import plot_energy_errors, plot_configuration_space
 
         # Default methods: fair comparison at same order
         if methods is None:
@@ -474,7 +474,7 @@ class LagrangianSystem:
         print()
 
         # Plot energy comparison
-        plot_energy_comparison(
+        plot_energy_errors(
             trajectories,
             self._energy_fn,
             params,

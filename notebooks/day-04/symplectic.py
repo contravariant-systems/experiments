@@ -20,7 +20,7 @@ from contravariant import (
     make_rk4_integrator,
     make_verlet_integrator,
     compare_energy_errors,
-    plot_phase_space_cloud,
+    plot_phase_space_multi,
 )
 
 
@@ -288,7 +288,7 @@ final_verlet_pend = vmap(
     lambda s: integrate_verlet_pend(s, n_steps, dt, params_pend, mass_matrix_pend)[-1]
 )(initial_states_pend)
 
-plot_phase_space_cloud(
+plot_phase_space_multi(
     initial_states_pend,
     [final_rk4_pend, final_verlet_pend],
     ["RK4", "Verlet"],

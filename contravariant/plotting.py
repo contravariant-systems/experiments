@@ -140,38 +140,7 @@ def plot_energy_error(traj, energy_fn, params, title=None, relative=False):
     return energies, error
 
 
-def compare_energy_errors(trajs, energy_fns, params_list, labels, title=None):
-    """
-    Compare energy error across multiple integrators.
-
-    Args:
-        trajs: list of trajectories
-        energy_fns: list of energy functions (or single function)
-        params_list: list of param dicts (or single dict)
-        labels: list of labels for each trajectory
-        title: plot title
-    """
-    if not isinstance(energy_fns, list):
-        energy_fns = [energy_fns] * len(trajs)
-    if not isinstance(params_list, list):
-        params_list = [params_list] * len(trajs)
-
-    plt.figure()
-    for traj, energy_fn, params, label in zip(trajs, energy_fns, params_list, labels):
-        energies = vmap(lambda s: energy_fn(s, params))(traj)
-        E0 = energies[0]
-        error = energies - E0
-        plt.plot(error, label=label)
-
-    plt.xlabel("Time step")
-    plt.ylabel("Energy Error")
-    plt.legend()
-    if title:
-        plt.title(title)
-    plt.show()
-
-
-def plot_phase_space_cloud(initial_states, final_states_list, labels, dof_index=0):
+def plot_phase_space_multi(initial_states, final_states_list, labels, dof_index=0):
     """
     Plot evolution of a cloud of initial conditions in phase space.
 
@@ -218,7 +187,7 @@ def plot_phase_space_cloud(initial_states, final_states_list, labels, dof_index=
     plt.show()
 
 
-def plot_energy_comparison(
+def plot_energy_errors(
     trajectories,
     energy_fn,
     params,
