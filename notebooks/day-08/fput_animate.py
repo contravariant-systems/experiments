@@ -36,7 +36,7 @@ def project_onto_modes(traj, N):
 
 N = 32
 sys = fput_chain(N, beta=True)
-params = {"m": 1.0, "k": 1.0, "beta": 2.0}
+params = {"m": 1.0, "k": 1.0, "beta": 8.0}
 
 amplitude = 2.0
 q0 = amplitude * np.array(normal_mode_shape(N, 1))

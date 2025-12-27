@@ -94,7 +94,8 @@ def final_energy(state_0, t_span, dt, params):
 
 print(final_energy(state_0, t_span, dt, params))
 grad_final_energy = grad(final_energy, argnums=[0, 3])
-print(jax.make_jaxpr(grad_final_energy)(state_0, t_span, dt, params))
+# This doesn't work because integrate_euler computes n_steps dynamically
+# print(jax.make_jaxpr(grad_final_energy)(state_0, t_span, dt, params))
 # print(grad_final_energy(state_0, t_span, dt, params))
 
 # The following allows us to quickly do 100 independent simulations,
