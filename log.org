@@ -1116,3 +1116,172 @@ trajectory loss with careful phase alignment).
 - Holonomic constraints (pendulum on moving pivot, bead on wire)
 - Implicit integrators for stiff potentials
 - Automatic float64 promotion when chaos detected
+
+** 2025-12-27 The Fermi-Pasta-Ulam-Tsingou Problem
+
+The Fermi-Pasta-Ulam-Tsingou problem (1955) is one of the founding
+puzzles of nonlinear dynamics. The authors setup a set of points in 1D
+space joined by mostly linear springs (with a small, like 10% addition
+of nonlinear terms of higher order) and set it off with different
+initial conditions.
+
+Instead of seeing "thermalization," i.e. the energy just got randomly
+distributed across different modes of vibration, for some values of
+parameters, they got recurrence instead.
+
+We reproduce large parts of these experiments today.
+
+
+*** What I Built/Learnt
+**** Learning about the problem
+
+- https://www.osti.gov/biblio/4376203
+- http://www.scholarpedia.org/article/Fermi-Pasta-Ulam_nonlinear_lattice_oscillations
+
+The FPUT model is a chain of $N$ masses with nearest-neighbour
+springs. The linear part is just the discrete wave equation (a lattice
+Laplacian): $m\ddot{x}_j = k(x_{j+1} + x_{j-1} - 2x_j)$. In
+normal-mode coordinates this linear system decouples, so each mode
+oscillates independently and energy stays exactly in whatever mode you
+initially excite.
+
+FPUT then add a weak nonlinearity to the spring force. In the
+$\alpha$ FPUT model the force has a quadratic correction—the potential
+gains a cubic term $\propto (\Delta x)^3$, so the force acquires an
+additional term quadratic in the displacement:
+
+$m\ddot{x}_j = k(x_{j+1} + x_{j-1} - 2x_j) + \alpha\bigl[(x_{j+1} - x_j)^2 - (x_j - x_{j-1})^2\bigr]$
+
+In the $\beta$ FPUT model the correction is cubic in the spring
+extension (quartic in the potential), typically written in terms of
+$\Delta x = x_{j+1} - x_j$ as a force $\propto \Delta x + \beta(\Delta
+x)^3$.
+
+What you see depends mainly on nonlinearity strength (small $\alpha$
+or $\beta$) and the initial condition (energy placed in one
+low-frequency mode). For weak nonlinearity and low-mode initial data,
+energy leaks into a few other modes but then returns: an
+almost-periodic FPUT recurrence rather than quick equipartition. As
+energy or $\alpha$, $\beta$ increase, more modes couple strongly, the
+motion looks more irregular, and the system tends toward equipartition
+(thermalization), often on a timescale that becomes very long as
+$\alpha, \beta \to 0$ because effective resonant mixing is weak.
+
+**** Experiments with a simple implementation of the problem
+
+After adding the system to our catalogue, I ran some experiments.
+
+***** Verify conservation
+
+At N = 32, the energy is basically conserved exactly, whether we use
+RK4 or Yoshida (it's basically within O(1.e-5)).
+
+Whereas at N=16 (or 8), something really interesting happens. the
+motion has gone to that chaotic place and the RK4 falls off a cliff,
+while Yoshida keeps going strong.
+
+- TODO Quasi-momentum from discrete translation (if periodic BC)
+
+***** The FPUT recurrence
+
+By trying out for 1,000,000 time steps, with different beta and
+amplitude result in different regimes:
+
+- Low amplitude/beta: Energy basically stays in first mode, where it
+  started.
+- Medium amplitude/beta: Some energy goes into mods 3 and 5 and
+  returns to 1 in a beautiful, cyclic fashion.
+- High amplitude/beta: Completely chaotic, energy just goes into all
+  different modes and never recurs.
+
+***** Scaling test
+
+The following is how the experiments scale with the number of points
+in the system. I feel like both the numerics and the symbolic stuff
+scale with =N=.
+
+|   N | Time     |
+|   8 | 3.729 s  |
+|  16 | 17.706 s |
+|  32 | 43.820 s |
+|  64 | 57.741 s |
+| 128 | 100.46 s |
+
+FPUT Scaling (1M steps, dt=0.1):
+
+- Symbolic derivation: O(N), ~0.2s per DOF
+- Integration: O(N) per step, but ~20× penalty crossing N≈16
+  (likely cache threshold)
+- For N=32: ~40K steps/sec → 1 second of simulation per second of wall time
+  (at dt=0.1, so T=100,000 per 1000s wall time)
+
+***** Momentum conservation
+
+When the boundaries are fixed, the momentum of this system is not
+conserved. The walls break translational symmetry. But when the
+boundary is periodic, this is not the case.
+
+This can be verified both numerically:
+
+#+begin_src
+Periodic BC:
+  P(0) = 8.000000
+  P(T) = 8.000112
+  max |ΔP| = 1.17e-04
+
+Fixed BC:
+  P(0) = 7.995241
+  P(T) = 1.053632
+  max |ΔP| = 1.53e+01
+#+end_src
+
+and symbolically:
+
+#+begin_src
+Noether charge (periodic): m*(q0_dot + q10_dot + q11_dot + q12_dot +
+q13_dot + q14_dot + q15_dot + q1_dot + q2_dot + q3_dot + q4_dot +
+q5_dot + q6_dot + q7_dot + q8_dot + q9_dot)
+
+Noether charge (fixed): m*(q0_dot + q10_dot + q11_dot + q12_dot +
+q13_dot + q14_dot + q15_dot + q1_dot + q2_dot + q3_dot + q4_dot +
+q5_dot + q6_dot + q7_dot + q8_dot + q9_dot)
+#+end_src
+
+
+***** TODO CHECKPOINT
+- Animated
+
+*** What Surprised Me
+
+**** Why Symplectic Integrators Matter
+
+The conventional wisdom is that higher-order integrators are "more
+accurate." RK4 and Yoshida are both O(h⁴) — they make the same size
+error per step. So why choose one over the other?
+
+The answer only becomes clear over long times, and especially in
+chaotic systems. RK4's errors are generic: each step slightly distorts
+phase space volume, and these distortions accumulate. In chaotic
+dynamics, small errors grow exponentially, and the systematic drift
+compounds into catastrophic energy loss (or gain). Yoshida's errors
+are constrained: as a symplectic integrator, it exactly preserves the
+symplectic 2-form, which means it cannot systematically drift in
+energy. The errors oscillate but remain bounded, even as the
+underlying dynamics becomes chaotic.
+
+The FPUT experiment reveals this starkly. At N=32 in the
+near-integrable regime, both integrators perform comparably. i.e The
+dynamics is "nice" and errors stay small. At N=8, the same total
+energy is concentrated in fewer modes, pushing the system into chaos.
+Here RK4 loses 75% of its energy over T=100,000 while Yoshida
+oscillates within 10⁻⁵. Same equations, same timestep, same formal
+accuracy — but fundamentally different long-term behavior. Symplectic
+integrators don't win by being more accurate per step; they win by not
+accumulating the kind of errors that destroy conservation laws. This
+is why they're essential for molecular dynamics, celestial mechanics,
+and any simulation where you need to trust the physics over millions
+of timesteps.
+
+*** What Is Confusing or Didn't Work
+*** Open Questions
+*** Refinements to the Vision
