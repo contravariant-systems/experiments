@@ -22,6 +22,7 @@ from contravariant.catalog import (
     coupled_oscillators,
     spherical_pendulum,
 )
+from contravariant.symbolic import derive_conserved_quantity
 
 
 jax.config.update("jax_enable_x64", True)
@@ -387,6 +388,206 @@ class TestHamiltonian:
         E_val = sys.evaluate_energy(state, params)
 
         assert jnp.abs(H_val - E_val) < 1e-10
+
+
+class TestNoetherTheorem:
+    """
+    Noether's theorem: continuous symmetry → conserved quantity.
+
+    Q = Σᵢ pᵢ · ξᵢ where ξ is the infinitesimal generator of the symmetry.
+
+    Beyond cyclic coordinates: we can derive conservation laws for any
+    continuous symmetry, even when no single coordinate is ignorable.
+    """
+
+    def test_translation_gives_momentum(self):
+        """Translation symmetry ξ = (1,) gives momentum p = m·q̇."""
+
+        sys = free_particle()
+        L = sys.lagrangian
+        q_vars = sys.q_vars
+        q_dot_vars = sys.q_dot_vars
+
+        # Translation: q → q + ε, so ξ = 1
+        xi = [1]
+        Q = derive_conserved_quantity(L, q_vars, q_dot_vars, xi)
+
+        m = symbols("m", positive=True)
+        q_dot = q_dot_vars[0]
+        expected = m * q_dot  # momentum
+
+        assert simplify(Q - expected) == 0, f"Expected p = m·q̇, got {Q}"
+
+    def test_rotation_gives_angular_momentum_2d_oscillator(self):
+        """
+        Rotation symmetry in 2D isotropic oscillator gives Lz.
+
+        Infinitesimal rotation: (q1, q2) → (q1 - ε·q2, q2 + ε·q1)
+        Generator: ξ = (-q2, q1)
+        Conserved: Lz = m(q1·v2 - q2·v1)
+        """
+
+        sys = harmonic_oscillator_2d()
+        L = sys.lagrangian
+        q_vars = sys.q_vars
+        q_dot_vars = sys.q_dot_vars
+
+        q1, q2 = q_vars
+        v1, v2 = q_dot_vars
+        m = symbols("m", positive=True)
+
+        # Rotation generator
+        xi = [-q2, q1]
+        Q = derive_conserved_quantity(L, q_vars, q_dot_vars, xi)
+
+        # Expected: Lz = m(q1·v2 - q2·v1)
+        expected = m * (q1 * v2 - q2 * v1)
+
+        assert simplify(Q - expected) == 0, f"Expected Lz, got {Q}"
+
+    def test_rotation_gives_angular_momentum_free_particle_2d(self):
+        """Same rotation symmetry for free particle 2D."""
+
+        sys = free_particle_2d()
+        L = sys.lagrangian
+        q_vars = sys.q_vars
+        q_dot_vars = sys.q_dot_vars
+
+        q1, q2 = q_vars
+        v1, v2 = q_dot_vars
+        m = symbols("m", positive=True)
+
+        xi = [-q2, q1]
+        Q = derive_conserved_quantity(L, q_vars, q_dot_vars, xi)
+
+        expected = m * (q1 * v2 - q2 * v1)
+
+        assert simplify(Q - expected) == 0, f"Expected Lz, got {Q}"
+
+    def test_polar_rotation_gives_angular_momentum(self):
+        """
+        In polar coordinates, rotation is just translation in θ.
+        ξ = (0, 1) gives L = m·r²·θ̇
+        """
+
+        sys = kepler()
+        L = sys.lagrangian
+        q_vars = sys.q_vars  # [r, theta]
+        q_dot_vars = sys.q_dot_vars  # [r_dot, theta_dot]
+
+        r = q_vars[0]
+        theta_dot = q_dot_vars[1]
+        m = symbols("m", positive=True)
+
+        # Rotation in θ: ξ = (0, 1)
+        xi = [0, 1]
+        Q = derive_conserved_quantity(L, q_vars, q_dot_vars, xi)
+
+        # Expected: L = m·r²·θ̇
+        expected = m * r**2 * theta_dot
+
+        assert simplify(Q - expected) == 0, f"Expected m·r²·θ̇, got {Q}"
+
+    def test_noether_charge_conserved_numerically(self):
+        """Verify that the Noether charge is actually constant along trajectory."""
+
+        sys = harmonic_oscillator_2d()
+        L = sys.lagrangian
+        q_vars = sys.q_vars
+        q_dot_vars = sys.q_dot_vars
+
+        q1, q2 = q_vars
+
+        # Get Lz symbolically
+        xi = [-q2, q1]
+        Lz_expr = derive_conserved_quantity(L, q_vars, q_dot_vars, xi)
+
+        # Compile to numerical function
+        Lz_fn = sys.compile(Lz_expr)
+
+        # Integrate with initial angular momentum
+        state_0 = jnp.array([1.0, 0.0, 0.0, 1.0])  # circular-ish motion
+        params = {"m": 1.0, "k": 1.0}
+
+        traj = sys.integrate(state_0, 2000, 0.01, params, method="yoshida")
+
+        # Evaluate Lz along trajectory
+        Lz_values = vmap(lambda s: Lz_fn(s, params))(traj)
+        Lz_0 = Lz_fn(state_0, params)
+
+        max_error = jnp.max(jnp.abs(Lz_values - Lz_0))
+        assert max_error < 1e-10, f"Lz not conserved: max error {max_error}"
+
+    def test_noether_charge_conserved_anisotropic_fails(self):
+        """
+        Anisotropic oscillator (kx ≠ ky) breaks rotation symmetry.
+        Lz should NOT be conserved.
+        """
+        # Create anisotropic 2D oscillator
+        sys_x = harmonic_oscillator(coord="q1", spring="kx")
+        sys_y = harmonic_oscillator(coord="q2", spring="ky")
+        sys = sys_x + sys_y
+
+        # Compile Lz
+        q1, q2 = sys.q_vars
+        v1, v2 = sys.q_dot_vars
+        m = symbols("m", positive=True)
+        Lz_expr = m * (q1 * v2 - q2 * v1)
+        Lz_fn = sys.compile(Lz_expr)
+
+        # Integrate with kx ≠ ky
+        state_0 = jnp.array([1.0, 0.0, 0.0, 1.0])
+        params = {"m": 1.0, "kx": 1.0, "ky": 2.0}  # Anisotropic!
+
+        traj = sys.integrate(state_0, 2000, 0.01, params, method="yoshida")
+
+        Lz_values = vmap(lambda s: Lz_fn(s, params))(traj)
+
+        # Lz should vary significantly
+        variation = jnp.max(Lz_values) - jnp.min(Lz_values)
+        assert (
+            variation > 0.1
+        ), f"Lz should vary for anisotropic oscillator, got {variation}"
+
+    def test_translations_in_each_direction(self):
+        """
+        Free particle 2D: translation in x gives px, translation in y gives py.
+        """
+
+        sys = free_particle_2d()
+        L = sys.lagrangian
+        q_vars = sys.q_vars
+        q_dot_vars = sys.q_dot_vars
+
+        v1, v2 = q_dot_vars
+        m = symbols("m", positive=True)
+
+        # Translation in q1
+        Q1 = derive_conserved_quantity(L, q_vars, q_dot_vars, [1, 0])
+        assert simplify(Q1 - m * v1) == 0, f"Expected px = m·v1, got {Q1}"
+
+        # Translation in q2
+        Q2 = derive_conserved_quantity(L, q_vars, q_dot_vars, [0, 1])
+        assert simplify(Q2 - m * v2) == 0, f"Expected py = m·v2, got {Q2}"
+
+    def test_combined_symmetry_generator(self):
+        """
+        Can combine symmetries: ξ = (1, 1) gives total momentum px + py.
+        """
+
+        sys = free_particle_2d()
+        L = sys.lagrangian
+        q_vars = sys.q_vars
+        q_dot_vars = sys.q_dot_vars
+
+        v1, v2 = q_dot_vars
+        m = symbols("m", positive=True)
+
+        # Diagonal translation
+        Q = derive_conserved_quantity(L, q_vars, q_dot_vars, [1, 1])
+        expected = m * (v1 + v2)
+
+        assert simplify(Q - expected) == 0, f"Expected p_total, got {Q}"
 
 
 class TestComposition:

@@ -181,11 +181,6 @@ class TestParameterValidation:
             assert len(w) == 0
 
 
-# =============================================================================
-# 5. INTEGRATOR METHOD VALIDATION
-# =============================================================================
-
-
 class TestIntegratorMethodValidation:
     """Test that invalid integrator methods are rejected."""
 
@@ -223,11 +218,6 @@ class TestIntegratorMethodValidation:
         for method in ["auto", "rk4", "verlet", "yoshida"]:
             traj = sys.integrate(state_0, 100, 0.01, params, method=method)
             assert traj.shape == (100, 2)
-
-
-# =============================================================================
-# 3. SYMPY SOLVE FAILURES
-# =============================================================================
 
 
 class TestSympyFailures:
