@@ -1215,7 +1215,7 @@ FPUT Scaling (1M steps, dt=0.1):
 - For N=32: ~40K steps/sec → 1 second of simulation per second of wall time
   (at dt=0.1, so T=100,000 per 1000s wall time)
 
-***** Momentum conservation
+**** Momentum conservation
 
 When the boundaries are fixed, the momentum of this system is not
 conserved. The walls break translational symmetry. But when the
@@ -1238,18 +1238,28 @@ Fixed BC:
 and symbolically:
 
 #+begin_src
-Noether charge (periodic): m*(q0_dot + q10_dot + q11_dot + q12_dot +
-q13_dot + q14_dot + q15_dot + q1_dot + q2_dot + q3_dot + q4_dot +
-q5_dot + q6_dot + q7_dot + q8_dot + q9_dot)
+δL (periodic): 0
 
-Noether charge (fixed): m*(q0_dot + q10_dot + q11_dot + q12_dot +
-q13_dot + q14_dot + q15_dot + q1_dot + q2_dot + q3_dot + q4_dot +
-q5_dot + q6_dot + q7_dot + q8_dot + q9_dot)
+δL (fixed): -4*beta*q0**3 - 4*beta*q15**3 - k*q0 - k*q15
 #+end_src
 
+**** Animating the results
 
-***** TODO CHECKPOINT
-- Animated
+I got to animate the overall movement of the nodes (in the y-axis) and
+plot it against the energy in different modes. It shows the entire
+behaviour of energy beginning in mode 1, flowing to the others and
+back, cyclically.
+
+**** Completely reorganised the experiments
+
+#+begin_src
+# 1. Install your package in "editable" mode
+# This installs dependencies from requirements.txt AND makes the 'contravariant' folder importable
+pip install -e .
+
+# 2. Install development tools separately
+pip install -r requirements-dev.txt
+#+end_src
 
 *** What Surprised Me
 
@@ -1283,5 +1293,11 @@ and any simulation where you need to trust the physics over millions
 of timesteps.
 
 *** What Is Confusing or Didn't Work
+
+- Initial parameter tuning to find the recurrence regime (too weak →
+  linear, too strong → chaos)
+- JAX async dispatch hiding true timings until =.block_until_ready()=
+- The symbolic conserved_quantity not checking if the symmetry holds
+
 *** Open Questions
 *** Refinements to the Vision
