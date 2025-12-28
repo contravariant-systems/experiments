@@ -138,6 +138,7 @@ class LagrangianSystem:
         if self._is_separable:
             self._grad_V_fn = compile_grad_V(self._eom, self._energy_parts)
             from sympy import diff, lambdify
+
             T = self._energy_parts["T"]
             mass_exprs = [diff(diff(T, qd), qd) for qd in self.q_dot_vars]
             self._mass_fn = lambdify(list(self.param_syms), mass_exprs, modules="jax")
