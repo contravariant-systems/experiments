@@ -1,3 +1,7 @@
+"""
+FPUT lattice: the system that started chaos theory.
+"""
+
 from sympy import symbols, Rational
 from ..systems import LagrangianSystem
 
