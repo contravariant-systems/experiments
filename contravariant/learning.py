@@ -184,16 +184,11 @@ def learn_parameters(
             return jnp.mean((traj - traj_observed) ** 2)
 
     elif loss_type == "energy_statistic":
-        # Precompute observed statistics
-        obs_mean_v2 = jnp.mean(jnp.sum(traj_observed[:, n_dof:] ** 2, axis=1))
-        obs_mean_q2 = jnp.mean(jnp.sum(traj_observed[:, :n_dof] ** 2, axis=1))
 
         def loss_fn(params_learn):
             params = make_full_params(params_learn)
             traj = integrate_fn(state_0, n_steps, dt, params)
-            pred_mean_v2 = jnp.mean(jnp.sum(traj[:, n_dof:] ** 2, axis=1))
-            pred_mean_q2 = jnp.mean(jnp.sum(traj[:, :n_dof] ** 2, axis=1))
-            return (pred_mean_v2 - obs_mean_v2) ** 2 + (pred_mean_q2 - obs_mean_q2) ** 2
+            return energy_statistic_loss(traj_observed, traj, n_dof)
 
     elif callable(loss_type):
 

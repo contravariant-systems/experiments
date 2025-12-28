@@ -137,14 +137,13 @@ class LagrangianSystem:
         self._is_separable = self._energy_parts["is_separable"]
         if self._is_separable:
             self._grad_V_fn = compile_grad_V(self._eom, self._energy_parts)
-            # Extract mass coefficients: mᵢ = ∂²T/∂q̇ᵢ²
-            from sympy import diff
-
+            from sympy import diff, lambdify
             T = self._energy_parts["T"]
-            self._mass_symbols = [diff(diff(T, qd), qd) for qd in self.q_dot_vars]
+            mass_exprs = [diff(diff(T, qd), qd) for qd in self.q_dot_vars]
+            self._mass_fn = lambdify(list(self.param_syms), mass_exprs, modules="jax")
         else:
             self._grad_V_fn = None
-            self._mass_symbols = None
+            self._mass_fn = None
 
         # Cache for integrators (created on demand)
         self._integrators = {}
@@ -358,14 +357,12 @@ class LagrangianSystem:
         return self._integrators[method]
 
     def _infer_mass_matrix(self, params):
-        """Infer mass from ∂²T/∂q̇² — works with any parameter names."""
-        if self._mass_symbols is None:
+        if self._mass_fn is None:
             raise ValueError("Non-separable system. Use method='rk4'.")
-
-        param_subs = {
-            sym: params[str(sym)] for sym in self.param_syms if str(sym) in params
-        }
-        return jnp.array([float(m.subs(param_subs)) for m in self._mass_symbols])
+        param_vals = [params[str(p)] for p in self.param_syms]
+        result = self._mass_fn(*param_vals)
+        # lambdify with list returns list; ensure proper 1D array
+        return jnp.array(result).reshape(self.n_dof)
 
     def _validate_params(self, params):
         """
