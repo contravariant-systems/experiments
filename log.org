@@ -1117,7 +1117,7 @@ trajectory loss with careful phase alignment).
 - Implicit integrators for stiff potentials
 - Automatic float64 promotion when chaos detected
 
-** 2025-12-27 The Fermi-Pasta-Ulam-Tsingou Problem
+** 2025-12-27: The Fermi-Pasta-Ulam-Tsingou Problem
 
 The Fermi-Pasta-Ulam-Tsingou problem (1955) is one of the founding
 puzzles of nonlinear dynamics. The authors setup a set of points in 1D
@@ -1299,5 +1299,28 @@ of timesteps.
 - JAX async dispatch hiding true timings until =.block_until_ready()=
 - The symbolic conserved_quantity not checking if the symmetry holds
 
+*** Open Questions
+*** Refinements to the Vision
+** 2025-12-28: Polishing the Abstraction
+
+Today was mostly auto-generated with a lots of experimentation and
+subtle improvements.
+
+*** What I Built/Learnt
+
+- Time-dependent Lagrangians are automatically recognised as not
+  energy conserving.
+- Ensure that sympectic methods cannot be used on non-separable
+  systems.
+- Be a bit more graceful about =sympy= failures in trying to solve the
+  Euler-Lagrange equations.
+- Ensure that all parameters that are needed are passed into the
+  integrators.
+- Expand on docstrings for education.
+- Add a whole test suite for the catalogue its behaviour as well as
+  edge cases.
+
+*** What Surprised Me
+*** What Is Confusing or Didn't Work
 *** Open Questions
 *** Refinements to the Vision
