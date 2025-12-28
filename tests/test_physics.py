@@ -14,6 +14,7 @@ from sympy import symbols, simplify, expand
 from contravariant.catalog import (
     harmonic_oscillator,
     harmonic_oscillator_2d,
+    anharmonic_oscillator,
     simple_pendulum,
     free_particle,
     free_particle_2d,
@@ -24,6 +25,119 @@ from contravariant.catalog import (
 
 
 jax.config.update("jax_enable_x64", True)
+
+
+class TestEquationsOfMotion:
+    """
+    Verify that Euler-Lagrange gives correct symbolic EOM.
+
+    Integration working doesn't guarantee correct physics — we could have
+    bugs that cancel out numerically. Symbolic verification is essential.
+    """
+
+    def test_sho_eom(self):
+        """SHO: q̈ = -k/m · q"""
+        sys = harmonic_oscillator()
+
+        q = sys.q_vars[0]
+        m, k = symbols("m k", positive=True)
+
+        # Get the acceleration expression
+        q_ddot = sys.q_dot_vars[0].name + "_dot"  # "q_dot_dot"
+        q_ddot_sym = symbols(q_ddot)
+        accel_expr = sys.equations_of_motion[q_ddot_sym]
+
+        expected = -k * q / m
+
+        diff = simplify(accel_expr - expected)
+        assert diff == 0, f"SHO EOM wrong: got {accel_expr}, expected {expected}"
+
+    def test_free_particle_eom(self):
+        """Free particle: q̈ = 0"""
+        sys = free_particle()
+
+        q_ddot_sym = list(sys.equations_of_motion.keys())[0]
+        accel_expr = sys.equations_of_motion[q_ddot_sym]
+
+        assert accel_expr == 0, f"Free particle should have q̈=0, got {accel_expr}"
+
+    def test_pendulum_eom(self):
+        """Pendulum: θ̈ = -g/l · sin(θ)"""
+        from sympy import sin
+
+        sys = simple_pendulum()
+
+        theta = sys.q_vars[0]
+        m, l, g = symbols("m l g", positive=True)
+
+        q_ddot_sym = list(sys.equations_of_motion.keys())[0]
+        accel_expr = sys.equations_of_motion[q_ddot_sym]
+
+        expected = -g * sin(theta) / l
+
+        diff = simplify(accel_expr - expected)
+        assert diff == 0, f"Pendulum EOM wrong: got {accel_expr}, expected {expected}"
+
+    def test_coupled_oscillators_eom(self):
+        """Coupled oscillators: q̈₁ and q̈₂ should have coupling terms."""
+        sys = coupled_oscillators()
+
+        q1, q2 = sys.q_vars
+        m, k, k_c = symbols("m k k_c", positive=True)
+
+        eom = sys.equations_of_motion
+        q1_ddot_sym = symbols("q1_dot_dot")
+        q2_ddot_sym = symbols("q2_dot_dot")
+
+        accel1 = eom[q1_ddot_sym]
+        accel2 = eom[q2_ddot_sym]
+
+        # q̈₁ = -(k + k_c)/m · q₁ + k_c/m · q₂
+        expected1 = -(k + k_c) * q1 / m + k_c * q2 / m
+        # q̈₂ = k_c/m · q₁ - (k + k_c)/m · q₂
+        expected2 = k_c * q1 / m - (k + k_c) * q2 / m
+
+        assert simplify(accel1 - expected1) == 0, f"q̈₁ wrong: {accel1}"
+        assert simplify(accel2 - expected2) == 0, f"q̈₂ wrong: {accel2}"
+
+    def test_kepler_eom_structure(self):
+        """Kepler: θ̈ should depend on θ̇ and r (Coriolis), r̈ should have centrifugal term."""
+        sys = kepler()
+
+        r, theta = sys.q_vars
+        m, k = symbols("m k", positive=True)
+
+        eom = sys.equations_of_motion
+        r_ddot_sym = symbols("r_dot_dot")
+        theta_ddot_sym = symbols("theta_dot_dot")
+
+        r_ddot_expr = eom[r_ddot_sym]
+        theta_ddot_expr = eom[theta_ddot_sym]
+
+        # r̈ should contain r·θ̇² (centrifugal) and -k/mr² (gravity)
+        theta_dot = symbols("theta_dot")
+        assert r_ddot_expr.has(theta_dot), "r̈ should have centrifugal term with θ̇"
+
+        # θ̈ should contain ṙ·θ̇/r (Coriolis)
+        r_dot = symbols("r_dot")
+        assert theta_ddot_expr.has(r_dot), "θ̈ should have Coriolis term with ṙ"
+        assert theta_ddot_expr.has(theta_dot), "θ̈ should have θ̇"
+
+    def test_anharmonic_oscillator_eom(self):
+        """Anharmonic: q̈ = -k/m · q - 4λ/m · q³ for quartic potential."""
+        sys = anharmonic_oscillator(order=4)
+
+        q = sys.q_vars[0]
+        m, k, lam = symbols("m k lambda", positive=True)
+
+        q_ddot_sym = list(sys.equations_of_motion.keys())[0]
+        accel_expr = sys.equations_of_motion[q_ddot_sym]
+
+        # V = ½kq² + λq⁴ → ∂V/∂q = kq + 4λq³ → q̈ = -(kq + 4λq³)/m
+        expected = -(k * q + 4 * lam * q**3) / m
+
+        diff = simplify(accel_expr - expected)
+        assert diff == 0, f"Anharmonic EOM wrong: got {accel_expr}, expected {expected}"
 
 
 class TestEnergyConservation:
@@ -394,7 +508,6 @@ class TestPhaseSpaceVolume:
 
         # Create cloud of initial conditions (small perturbations)
         n_particles = 100
-        key = jnp.array([0, 1], dtype=jnp.uint32)  # Simple seed
 
         # Deterministic spread around (1, 0)
         angles = jnp.linspace(0, 2 * jnp.pi, n_particles, endpoint=False)
