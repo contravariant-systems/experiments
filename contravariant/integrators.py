@@ -1,18 +1,48 @@
 """
 Numerical integrators for dynamical systems.
 
-State Convention:
-    All integrators use state = [q₁, ..., qₙ, v₁, ..., vₙ]
-    where q are generalized coordinates and v are velocities.
-    Symplectic integrators convert to momenta (p = m·v) internally.
+This module provides time-stepping methods for solving the equations of motion.
+The key distinction is between general-purpose integrators (RK4) and symplectic
+integrators (Verlet, Yoshida) that preserve the geometric structure of
+Hamiltonian mechanics.
 
-Integrator Hierarchy:
-    - O(h¹): Euler (pedagogical only, not symplectic)
-    - O(h²): Störmer-Verlet (symplectic)
-    - O(h⁴): RK4 (accurate, not symplectic)
-    - O(h⁴): Yoshida (accurate AND symplectic)
+Why Symplectic Integrators Matter
+---------------------------------
+For Hamiltonian systems, the flow preserves a geometric quantity called the
+symplectic 2-form. Standard integrators (Euler, RK4) do not preserve this
+structure, which causes:
 
-Usage:
+1. Systematic energy drift over long times
+2. Artificial damping or growth of phase space volume
+3. Qualitatively wrong long-term behavior (especially in chaotic systems)
+
+Symplectic integrators preserve the symplectic structure exactly (up to
+floating-point precision), so:
+
+1. Energy error stays bounded and oscillates, never drifts
+2. Phase space volume is exactly conserved
+3. Long-term statistics are correct even if individual trajectories diverge
+
+The catch: symplectic integrators require a separable Hamiltonian H = T(p) + V(q).
+This is why LagrangianSystem checks for separability and auto-selects methods.
+
+Integrator Hierarchy
+--------------------
+- O(h¹): Euler — pedagogical only, systematically wrong
+- O(h²): Störmer-Verlet — symplectic, robust, widely used in MD
+- O(h⁴): RK4 — accurate per-step, but energy drifts long-term
+- O(h⁴): Yoshida — same accuracy as RK4, but symplectic
+
+For most purposes, use 'auto' method selection: Yoshida if separable, RK4 if not.
+
+State Convention
+----------------
+All integrators use state = [q₁, ..., qₙ, v₁, ..., vₙ] where q are generalized
+coordinates and v are velocities. Symplectic integrators convert to momenta
+(p = m·v) internally.
+
+Usage
+-----
     # For arbitrary dynamics (e.g., Lagrangian systems)
     integrator = make_rk4_integrator(dynamics_fn)
     traj = integrator(state_0, n_steps, dt, params)
@@ -24,6 +54,11 @@ Usage:
     # For separable Hamiltonians, 4th-order accurate
     integrator = make_yoshida_integrator(grad_V_fn, n_dof)
     traj = integrator(state_0, n_steps, dt, params, mass_matrix)
+
+References
+----------
+- Hairer, Lubich, Wanner: "Geometric Numerical Integration"
+- Yoshida (1990): "Construction of higher order symplectic integrators"
 """
 
 from functools import partial

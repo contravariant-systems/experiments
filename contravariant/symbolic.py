@@ -1,7 +1,46 @@
 """
-Symbolic mechanics utilities using sympy.
+Symbolic mechanics utilities using SymPy.
 
-Derives equations of motion from Lagrangians via Euler-Lagrange.
+This module implements the mathematical backbone of the framework: deriving
+equations of motion from Lagrangians via the Euler-Lagrange equations.
+
+The Euler-Lagrange Equation
+---------------------------
+For a Lagrangian L(q, q̇, t), the equations of motion are:
+
+    d/dt(∂L/∂q̇) - ∂L/∂q = 0
+
+For autonomous systems (no explicit time dependence), we expand d/dt using
+the chain rule and solve for the accelerations q̈:
+
+    d/dt(∂L/∂q̇) = Σⱼ (∂²L/∂q̇∂qⱼ) q̇ⱼ + Σⱼ (∂²L/∂q̇∂q̇ⱼ) q̈ⱼ
+
+This gives a system of linear equations in q̈, which SymPy solves symbolically.
+
+Key Functions
+-------------
+derive_equations_of_motion:
+    The main workhorse. Takes L, returns symbolic expressions for q̈.
+
+derive_hamiltonian:
+    Legendre transform: H = Σᵢ pᵢq̇ᵢ - L where pᵢ = ∂L/∂q̇ᵢ
+
+find_cyclic_coordinates:
+    A coordinate q is cyclic if ∂L/∂q = 0. Its conjugate momentum p = ∂L/∂q̇
+    is then conserved (Noether's theorem for translation symmetry).
+
+extract_kinetic_potential:
+    Attempt to write L = T - V where T depends only on velocities.
+    If successful, the system is "separable" and symplectic integrators apply.
+
+derive_conserved_quantity:
+    Noether's theorem: given a symmetry generator ξ, compute Q = Σᵢ pᵢξᵢ.
+
+Notes
+-----
+Richardson's theorem proves that symbolic equality is undecidable in general.
+We use multiple simplification strategies (simplify, expand, trigsimp) to
+handle most practical cases, but pathological expressions may fail.
 """
 
 from sympy import symbols, diff, solve, simplify, expand, trigsimp
@@ -114,7 +153,40 @@ def derive_equations_of_motion(L, q_vars, q_dot_vars):
         accelerations[q_ddot] = euler_lagrange
 
     # Solve the system for accelerations
-    solutions = solve(list(accelerations.values()), q_ddot_vars)
+    try:
+        solutions = solve(list(accelerations.values()), q_ddot_vars)
+    except Exception as e:
+        raise RuntimeError(
+            f"SymPy could not solve the Euler-Lagrange equations.\n\n"
+            f"This can happen for highly nonlinear or pathological Lagrangians.\n"
+            f"Original error: {type(e).__name__}: {e}\n\n"
+            f"Lagrangian: L = {L}"
+        ) from e
+
+    # Check for empty solutions (solve() returns {} if it can't find a solution)
+    if not solutions:
+        raise RuntimeError(
+            f"SymPy could not solve the Euler-Lagrange equations for accelerations.\n\n"
+            f"The system of equations may be:\n"
+            f"  - Singular (determinant of mass matrix is zero)\n"
+            f"  - Under/over-determined\n"
+            f"  - Too complex for symbolic solution\n\n"
+            f"Euler-Lagrange equations:\n"
+            + "\n".join(f"  {qdd} : {eq} = 0" for qdd, eq in accelerations.items())
+            + f"\n\nLagrangian: L = {L}"
+        )
+
+    # Handle case where solve() returns a list of multiple solutions
+    if isinstance(solutions, list):
+        if len(solutions) == 1:
+            solutions = solutions[0]
+        else:
+            raise RuntimeError(
+                f"SymPy found multiple solutions for the accelerations.\n\n"
+                f"This is unexpected for a well-posed mechanical system.\n"
+                f"Number of solution branches: {len(solutions)}\n\n"
+                f"Lagrangian: L = {L}"
+            )
 
     cyclic = find_cyclic_coordinates(L, q_vars, q_dot_vars)
     H, momenta = derive_hamiltonian(L, q_vars, q_dot_vars)

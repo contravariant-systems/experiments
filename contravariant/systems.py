@@ -30,18 +30,55 @@ from jax import vmap
 
 class LagrangianSystem:
     """
-    A Lagrangian mechanical system.
+    A Lagrangian mechanical system: from symbolic physics to compiled numerics.
 
-    Construction: symbolic analysis (slow, once)
-    Integration: compiled numerics (fast, many times)
+    This class is the core abstraction of the framework. Given a symbolic
+    Lagrangian L(q, q̇), it automatically:
+
+    1. Derives the Euler-Lagrange equations of motion
+    2. Computes the Hamiltonian via Legendre transform
+    3. Identifies conserved quantities (cyclic coordinates → momenta)
+    4. Detects separability (determines which integrators can be used)
+    5. Compiles everything to efficient JAX functions
+
+    The physics is specified once, symbolically. The numerics are generated
+    automatically and run fast.
+
+    Attributes:
+        coordinates: The generalized coordinate symbols [q1, q2, ...]
+        velocities: The generalized velocity symbols [q1_dot, q2_dot, ...]
+        parameters: The parameter symbols [m, k, ...]
+        dof: Number of degrees of freedom
+        lagrangian: The symbolic Lagrangian L
+        hamiltonian: The symbolic Hamiltonian H = Σ pᵢq̇ᵢ - L
+        momenta: List of (q̇, p) pairs where p = ∂L/∂q̇
+        cyclic_coordinates: List of (q, p) pairs where q is cyclic
+        is_separable: True if H = T(p) + V(q), enabling symplectic methods
+        kinetic_energy: Symbolic T
+        potential_energy: Symbolic V
 
     Example:
-        >>> from sympy import symbols, Rational
-        >>> q, q_dot = symbols('q q_dot')
-        >>> m, k = symbols('m k', positive=True)
-        >>> L = Rational(1,2)*m*q_dot**2 - Rational(1,2)*k*q**2
-        >>> sys = LagrangianSystem(L, [q], [q_dot])
-        >>> traj = sys.integrate(state_0, n_steps, dt, params)
+        >>> from sympy import symbols, Rational, cos
+        >>> from contravariant import LagrangianSystem
+
+        # Define a simple pendulum
+        >>> theta, theta_dot = symbols('theta theta_dot')
+        >>> m, l, g = symbols('m l g', positive=True)
+        >>> L = Rational(1,2)*m*l**2*theta_dot**2 - m*g*l*(1 - cos(theta))
+
+        # Create the system (symbolic analysis happens here)
+        >>> pendulum = LagrangianSystem(L, [theta], [theta_dot])
+        >>> print(pendulum.hamiltonian)  # Automatically derived
+
+        # Integrate (compiled numerics, fast)
+        >>> import jax.numpy as jnp
+        >>> state_0 = jnp.array([0.5, 0.0])  # θ=0.5 rad, θ̇=0
+        >>> params = {'m': 1.0, 'l': 1.0, 'g': 9.8}
+        >>> traj = pendulum.integrate(state_0, 10000, 0.01, params)
+
+    See Also:
+        - contravariant.catalog: Pre-built systems (harmonic_oscillator, double_pendulum, ...)
+        - Composition via + operator: sys_2d = sys_x + sys_y
     """
 
     def __init__(self, L, q_vars, q_dot_vars):
@@ -52,12 +89,32 @@ class LagrangianSystem:
             L: sympy expression for the Lagrangian
             q_vars: list of position symbols [q1, q2, ...]
             q_dot_vars: list of velocity symbols [q1_dot, q2_dot, ...]
+
+        Raises:
+            ValueError: If the Lagrangian has explicit time dependence (not yet supported)
         """
+        from sympy import symbols
+
         # Store symbolic ingredients
         self.L = L
         self.q_vars = list(q_vars)
         self.q_dot_vars = list(q_dot_vars)
         self.n_dof = len(q_vars)
+
+        # Check for explicit time dependence
+        # Convention: symbol named 't' is time
+        t = symbols("t")
+        self._time_symbol = t if t in L.free_symbols else None
+        self._is_time_dependent = self._time_symbol is not None
+
+        if self._is_time_dependent:
+            raise ValueError(
+                "Time-dependent Lagrangians (L contains explicit 't') are not yet supported.\n"
+                "The Lagrangian contains the time symbol 't', which requires modified "
+                "integrators.\n"
+                "This feature is planned for a future release.\n\n"
+                f"Your Lagrangian: L = {L}"
+            )
 
         # Derive everything symbolically (once, at construction)
         self._eom = derive_equations_of_motion(L, q_vars, q_dot_vars)
@@ -137,6 +194,17 @@ class LagrangianSystem:
         return self._is_separable
 
     @property
+    def is_time_dependent(self):
+        """
+        True if L depends explicitly on time t.
+
+        For autonomous systems (time-independent), energy is conserved.
+        For non-autonomous systems (time-dependent), energy is NOT conserved:
+        dH/dt = -∂L/∂t
+        """
+        return self._is_time_dependent
+
+    @property
     def kinetic_energy(self):
         """Symbolic kinetic energy T."""
         return self._energy_parts["T"]
@@ -188,21 +256,55 @@ class LagrangianSystem:
         """
         Integrate the system forward in time.
 
+        This is the main simulation method. It evolves the initial state forward
+        using the compiled equations of motion. The integrator is chosen
+        automatically based on the system's structure, or can be specified manually.
+
+        Integrator Selection:
+            For separable Hamiltonians H = T(p) + V(q), symplectic integrators
+            (Yoshida, Verlet) preserve phase space structure and maintain bounded
+            energy error over arbitrarily long times. For non-separable systems,
+            RK4 is used.
+
+            - 'yoshida': 4th-order symplectic. Best for long simulations of
+              separable systems. Same accuracy as RK4 per step, but energy
+              stays bounded even in chaotic regimes.
+            - 'verlet': 2nd-order symplectic. Faster per step than Yoshida,
+              but lower accuracy.
+            - 'rk4': 4th-order Runge-Kutta. Works for any system, but energy
+              drifts over time (especially in chaotic systems).
+            - 'auto': Yoshida if separable, else RK4 (recommended).
+
         Args:
-            state_0: initial state [q1, ..., qn, q1_dot, ..., qn_dot]
-            n_steps: number of integration steps
-            dt: timestep
-            params: dict of parameter values
-            method: 'auto', 'yoshida', 'verlet', or 'rk4'
-                - 'auto': Yoshida if separable, else RK4
-                - 'yoshida': 4th-order symplectic (requires separable)
-                - 'verlet': 2nd-order symplectic (requires separable)
-                - 'rk4': 4th-order Runge-Kutta
-            mass_matrix: array of masses (required for symplectic, inferred if possible)
+            state_0: Initial state as JAX array [q1, ..., qn, q1_dot, ..., qn_dot].
+                     Positions first, then velocities.
+            n_steps: Number of integration steps (static, for JIT compilation)
+            dt: Timestep size. Smaller = more accurate but slower.
+            params: Dict of parameter values, e.g., {'m': 1.0, 'k': 2.0}.
+                    Must include all parameters appearing in the Lagrangian.
+            method: Integration method. One of 'auto', 'yoshida', 'verlet', 'rk4'.
+            mass_matrix: Array of masses for symplectic integrators.
+                         If None, inferred from params (looks for 'm' or 'm1', 'm2', ...).
 
         Returns:
-            trajectory array of shape (n_steps, 2*n_dof)
+            Trajectory array of shape (n_steps, 2*n_dof) containing the state
+            at each timestep.
+
+        Raises:
+            ValueError: If params is missing required parameters, or if a
+                        symplectic method is requested for a non-separable system.
+
+        Example:
+            >>> import jax.numpy as jnp
+            >>> state_0 = jnp.array([1.0, 0.0])  # q=1, q̇=0
+            >>> params = {'m': 1.0, 'k': 4.0}
+            >>> traj = sys.integrate(state_0, 10000, 0.01, params)
+            >>> traj.shape
+            (10000, 2)
         """
+        # Validate parameters
+        self._validate_params(params)
+
         # Resolve method
         if method == "auto":
             method = "yoshida" if self._is_separable else "rk4"
@@ -210,8 +312,11 @@ class LagrangianSystem:
         # Validate method choice
         if method in ("verlet", "yoshida") and not self._is_separable:
             raise ValueError(
-                f"{method.capitalize()} integration requires separable Hamiltonian "
-                "H = T(p) + V(q). This system is not separable. Use method='rk4' instead."
+                f"{method.capitalize()} integration requires a separable Hamiltonian "
+                f"H = T(p) + V(q), where T depends only on momenta and V only on positions.\n\n"
+                f"This system is NOT separable because the kinetic energy depends on positions:\n"
+                f"  T = {self.kinetic_energy}\n\n"
+                f"Use method='rk4' instead, or let method='auto' choose automatically."
             )
 
         # Get or create integrator
@@ -260,17 +365,74 @@ class LagrangianSystem:
                 )
         return jnp.array(masses)
 
+    def _validate_params(self, params):
+        """
+        Validate that all required parameters are provided.
+
+        Raises:
+            ValueError: If params is missing required symbols
+        """
+        required = {str(p) for p in self.param_syms}
+        provided = set(params.keys())
+        missing = required - provided
+
+        if missing:
+            raise ValueError(
+                f"Missing required parameter(s): {', '.join(sorted(missing))}\n"
+                f"Required: {{{', '.join(sorted(required))}}}\n"
+                f"Provided: {{{', '.join(sorted(provided))}}}"
+            )
+
+        # Also warn about extra params (might be typos)
+        extra = provided - required
+        if extra:
+            import warnings
+
+            warnings.warn(
+                f"Extra parameter(s) not used by system: {', '.join(sorted(extra))}",
+                UserWarning,
+            )
+
     # -------------------------------------------------------------------------
     # Conservation analysis
     # -------------------------------------------------------------------------
 
     def check_symmetry(self, xi):
         """
-        Check if transformation generated by ξ is a symmetry.
+        Check if a transformation is a symmetry of the Lagrangian.
 
-        Returns δL = Σ (∂L/∂qᵢ)ξᵢ.
-        If δL = 0, the transformation is a symmetry and
-        conserved_quantity(xi) gives the conserved charge.
+        Noether's theorem states: every continuous symmetry of L corresponds to
+        a conserved quantity. This method checks if a given infinitesimal
+        transformation qᵢ → qᵢ + ε·ξᵢ leaves L invariant.
+
+        The variation of L under the transformation is:
+            δL = Σᵢ (∂L/∂qᵢ) ξᵢ
+
+        If δL = 0, the transformation is a symmetry and conserved_quantity(xi)
+        gives the corresponding conserved charge.
+
+        Common symmetries:
+            - Translation: ξᵢ = 1 for all i → conserves total momentum
+            - Rotation (2D): ξ = [-y, x] → conserves angular momentum
+            - Time translation (implicit): → conserves energy (Hamiltonian)
+
+        Args:
+            xi: List of expressions [ξ₁, ξ₂, ...] defining the infinitesimal
+                generator. Must have same length as number of coordinates.
+
+        Returns:
+            Symbolic expression for δL. If this simplifies to 0, the
+            transformation is a symmetry.
+
+        Example:
+            >>> # Check translation symmetry for FPUT chain with periodic BC
+            >>> xi = [1] * N  # Uniform translation
+            >>> delta_L = sys.check_symmetry(xi)
+            >>> print(delta_L)  # Should be 0 for periodic BC
+            0
+
+        See Also:
+            conserved_quantity: Compute the conserved charge for a symmetry
         """
         from sympy import diff, simplify
 
@@ -279,13 +441,35 @@ class LagrangianSystem:
 
     def conserved_quantity(self, xi):
         """
-        Compute the conserved quantity for a symmetry.
+        Compute the Noether charge for a symmetry transformation.
+
+        Given an infinitesimal generator ξ that defines a symmetry (δL = 0),
+        the corresponding conserved quantity is:
+            Q = Σᵢ pᵢ ξᵢ = Σᵢ (∂L/∂q̇ᵢ) ξᵢ
+
+        This is Noether's theorem in computational form.
+
+        WARNING: This method computes Q regardless of whether ξ actually
+        defines a symmetry. Use check_symmetry(xi) first to verify that
+        δL = 0, otherwise Q will not be conserved.
 
         Args:
-            xi: list of expressions [ξ1, ξ2, ...] defining the infinitesimal generator
+            xi: List of expressions [ξ₁, ξ₂, ...] defining the infinitesimal
+                generator. Same length as number of coordinates.
 
         Returns:
-            symbolic expression for the conserved quantity Q = Σ pᵢξᵢ
+            Symbolic expression for the conserved quantity Q.
+
+        Example:
+            >>> # Compute angular momentum for 2D isotropic oscillator
+            >>> xi = [-y, x]  # Rotation generator
+            >>> if sys.check_symmetry(xi) == 0:
+            ...     L_z = sys.conserved_quantity(xi)
+            ...     print(f"Angular momentum: {L_z}")
+            Angular momentum: m*(x*y_dot - y*x_dot)
+
+        See Also:
+            check_symmetry: Verify that ξ defines a symmetry before computing Q
         """
         return derive_conserved_quantity(self.L, self.q_vars, self.q_dot_vars, xi)
 
