@@ -101,8 +101,12 @@ class LagrangianSystem:
         self.q_dot_vars = list(q_dot_vars)
         self.n_dof = len(q_vars)
 
-        # Check for explicit time dependence
-        # Convention: symbol named 't' is time
+        # Time detection convention:
+        # Unlike coordinates, velocities, and parameters (which are user-specified or extracted),
+        # the time symbol is hardcoded as 't'. This means:
+        #   - 't' cannot be used as a parameter name (e.g., temperature)
+        #   - Alternative time symbols (τ, time) won't be detected as time-dependent
+        # Future: add time_symbol parameter to __init__ if needed.
         t = symbols("t")
         self._time_symbol = t if t in L.free_symbols else None
         self._is_time_dependent = self._time_symbol is not None
@@ -133,8 +137,14 @@ class LagrangianSystem:
         self._is_separable = self._energy_parts["is_separable"]
         if self._is_separable:
             self._grad_V_fn = compile_grad_V(self._eom, self._energy_parts)
+            # Extract mass coefficients: mᵢ = ∂²T/∂q̇ᵢ²
+            from sympy import diff
+
+            T = self._energy_parts["T"]
+            self._mass_symbols = [diff(diff(T, qd), qd) for qd in self.q_dot_vars]
         else:
             self._grad_V_fn = None
+            self._mass_symbols = None
 
         # Cache for integrators (created on demand)
         self._integrators = {}
@@ -348,22 +358,14 @@ class LagrangianSystem:
         return self._integrators[method]
 
     def _infer_mass_matrix(self, params):
-        """Try to infer mass matrix from params. Override if needed."""
-        # Simple heuristic: look for 'm' or 'm1', 'm2', etc.
-        if "m" in params:
-            return jnp.array([params["m"]] * self.n_dof)
+        """Infer mass from ∂²T/∂q̇² — works with any parameter names."""
+        if self._mass_symbols is None:
+            raise ValueError("Non-separable system. Use method='rk4'.")
 
-        masses = []
-        for i in range(self.n_dof):
-            key = f"m{i+1}" if self.n_dof > 1 else "m"
-            if key in params:
-                masses.append(params[key])
-            else:
-                raise ValueError(
-                    f"Cannot infer mass matrix. Provide mass_matrix argument "
-                    f"or ensure params contains 'm' or 'm1', 'm2', etc."
-                )
-        return jnp.array(masses)
+        param_subs = {
+            sym: params[str(sym)] for sym in self.param_syms if str(sym) in params
+        }
+        return jnp.array([float(m.subs(param_subs)) for m in self._mass_symbols])
 
     def _validate_params(self, params):
         """
