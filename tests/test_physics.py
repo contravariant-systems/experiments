@@ -141,6 +141,28 @@ class TestEquationsOfMotion:
         assert diff == 0, f"Anharmonic EOM wrong: got {accel_expr}, expected {expected}"
 
 
+class TestAnalyticalSolutions:
+    """Verify trajectories match known analytical solutions."""
+
+    def test_sho_trajectory_matches_cosine(self):
+        """SHO: q(t) = A·cos(ωt) where ω = √(k/m)."""
+        sys = harmonic_oscillator()
+        A = 1.0
+        state_0 = jnp.array([A, 0.0])  # q=A, v=0
+        params = {"m": 1.0, "k": 4.0}  # ω = 2
+
+        dt = 0.001
+        n_steps = 1000  # t_final = 1.0
+        traj = sys.integrate(state_0, n_steps, dt, params, method="yoshida")
+
+        # Analytical: q(t) = cos(2t)
+        t = jnp.arange(1, n_steps + 1) * dt
+        q_analytical = A * jnp.cos(2.0 * t)
+
+        max_error = jnp.max(jnp.abs(traj[:, 0] - q_analytical))
+        assert max_error < 1e-6, f"SHO trajectory error: {max_error}"
+
+
 class TestEnergyConservation:
     """
     The core value proposition: symplectic integrators preserve energy better.

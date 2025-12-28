@@ -436,9 +436,7 @@ class TestCheckConservation:
         p2 = m * v2
 
         traj = sys.integrate(state_0, 100, 0.01, params, method="yoshida")
-        result = sys.check_conservation(
-            traj, params, quantities={"p1": p1, "p2": p2}
-        )
+        result = sys.check_conservation(traj, params, quantities={"p1": p1, "p2": p2})
 
         assert "energy" in result
         assert "p1" in result
