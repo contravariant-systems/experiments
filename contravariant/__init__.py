@@ -18,7 +18,6 @@ from .symbolic import (
 
 from .codegen import (
     compile_lagrangian_dynamics,
-    compile_hamiltonian_dynamics,
     compile_grad_V,
     compile_energy,
     compile_expression,

@@ -41,53 +41,6 @@ def energy_statistic_loss(traj_observed, traj_predicted, n_dof):
     return (pred_mean_q2 - obs_mean_q2) ** 2 + (pred_mean_v2 - obs_mean_v2) ** 2
 
 
-def make_loss_fn(integrate_fn, traj_observed, state_0, n_steps, dt):
-    """
-    Create a loss function for parameter learning.
-
-    Args:
-        integrate_fn: function (state_0, n_steps, dt, params) -> trajectory
-        traj_observed: observed trajectory to match
-        state_0: initial state
-        n_steps: number of integration steps
-        dt: timestep
-
-    Returns:
-        loss(params) -> scalar
-    """
-
-    def loss(params):
-        traj_predicted = integrate_fn(state_0, n_steps, dt, params)
-        return trajectory_loss(traj_observed, traj_predicted)
-
-    return loss
-
-
-def make_loss_fn_with_dynamics(
-    integrate_fn, dynamics, traj_observed, state_0, n_steps, dt
-):
-    """
-    Create a loss function for parameter learning when dynamics is a separate arg.
-
-    Args:
-        integrate_fn: function (state_0, n_steps, dt, params, dynamics) -> trajectory
-        dynamics: the dynamics function
-        traj_observed: observed trajectory to match
-        state_0: initial state
-        n_steps: number of integration steps
-        dt: timestep
-
-    Returns:
-        loss(params) -> scalar
-    """
-
-    def loss(params):
-        traj_predicted = integrate_fn(state_0, n_steps, dt, params, dynamics)
-        return trajectory_loss(traj_observed, traj_predicted)
-
-    return loss
-
-
 def gradient_descent(
     loss_fn, params_init, learning_rate, n_iters, param_mask=None, print_every=10
 ):

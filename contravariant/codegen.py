@@ -44,61 +44,6 @@ def compile_lagrangian_dynamics(eom):
     return dynamics
 
 
-def compile_hamiltonian_dynamics(eom, energy_parts):
-    """
-    Generate Hamiltonian dynamics for separable H = T(p) + V(q).
-
-    state = [q1, ..., qn, p1, ..., pn]
-    Returns function: f(state, params) -> d_state/dt
-
-    Hamilton's equations:
-        dq/dt = ∂H/∂p = ∂T/∂p
-        dp/dt = -∂H/∂q = -∂V/∂q
-
-    Args:
-        eom: dict from derive_equations_of_motion
-        energy_parts: dict from extract_kinetic_potential
-
-    Returns:
-        JAX-compatible dynamics function
-    """
-    from sympy import diff
-
-    q_vars = eom["q_vars"]
-    q_dot_vars = eom["q_dot_vars"]
-    param_syms = eom["param_syms"]
-
-    n_dof = len(q_vars)
-    T = energy_parts["T"]
-    V = energy_parts["V"]
-
-    # For standard kinetic energy T = Σ p²/2m, we have p = m*q_dot
-    # So ∂T/∂p = p/m = q_dot
-    # For now, assume simple case: ∂T/∂q_dot = m*q_dot, so ∂T/∂p = q_dot
-    grad_T_exprs = [diff(T, qd) for qd in q_dot_vars]  # These are momenta-like
-    grad_V_exprs = [diff(V, q) for q in q_vars]
-
-    all_inputs = list(q_vars) + list(q_dot_vars) + list(param_syms)
-    grad_V_fn = lambdify(all_inputs, grad_V_exprs, modules="jax")
-
-    def dynamics(state, params):
-        q_vals = [state[i] for i in range(n_dof)]
-        q_dot_vals = [state[n_dof + i] for i in range(n_dof)]
-        param_vals = [params[str(p)] for p in param_syms]
-
-        # dq/dt = q_dot (trivial for Lagrangian form)
-        dq_dt = q_dot_vals
-
-        # For Lagrangian form with standard T = ½m*q_dot²:
-        # The EOM gives us q_ddot directly
-        # This function is really for when you want grad_V separately
-        grad_V_vals = grad_V_fn(*q_vals, *q_dot_vals, *param_vals)
-
-        return jnp.array([*dq_dt, *[-g for g in grad_V_vals]])
-
-    return dynamics
-
-
 def compile_grad_V(eom, energy_parts):
     """
     Generate a function that computes ∇V(q) for use in symplectic integrators.
